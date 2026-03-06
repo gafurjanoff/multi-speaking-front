@@ -1,3 +1,7 @@
+
+@import "../styles/otp-login.css";
+@import "../styles/certificate.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,6 +17,16 @@ body {
 }
 
 @layer base {
+  html {
+    font-size: 17px;
+  }
+
+  @screen md {
+    html {
+      font-size: 18px;
+    }
+  }
+
   :root {
     --background: 0 0% 99%;
     --foreground: 210 11% 15%;

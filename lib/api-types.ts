@@ -30,15 +30,20 @@ export interface User {
   role: UserRole
   avatar?: string
   createdAt: string
+  isAdmin?: boolean
 }
 
 export interface StudentProfile extends User {
   role: "student"
+  // For this site, level is determined AFTER exams based on score,
+  // but we keep the field for mock data / future analytics.
   level: string
   totalExamsTaken: number
   averageScore: number
-  streak: number
-  badges: Badge[]
+  // Optional profile fields for certificates
+  age?: number
+  dateOfBirth?: string
+  bio?: string
 }
 
 export interface TeacherProfile extends User {
@@ -61,14 +66,11 @@ export interface ExamCard {
   title: string
   level: string
   description: string
-  duration: string
   totalParts: number
   isFree: boolean
   isMock: boolean
-  difficulty: "beginner" | "intermediate" | "advanced"
+  isPublished: boolean
   questionsCount: number
-  completedBy: number
-  averageScore: number
 }
 
 // --- Exam Results ---

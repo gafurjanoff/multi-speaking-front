@@ -1,10 +1,16 @@
 export type ExamPartType = "part1" | "part1_photos" | "part2" | "part3"
 
+export interface ForAgainstPoint {
+  side: "for" | "against"
+  pointText: string
+}
+
 export interface ExamQuestion {
   id: string
   text: string
   subQuestions?: string[]
   images?: string[]
+  forAgainst?: ForAgainstPoint[]
 }
 
 export interface ExamPart {
@@ -13,6 +19,8 @@ export interface ExamPart {
   title: string
   partNumber: number
   instruction: string
+  instructionAudio?: string | null
+  images?: string[] | null
   prepTime: number // seconds
   answerTime: number // seconds
   questions: ExamQuestion[]
@@ -22,6 +30,8 @@ export interface Exam {
   id: string
   title: string
   level: string
+  isFree?: boolean
+  isMock?: boolean
   parts: ExamPart[]
 }
 

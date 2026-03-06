@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef, useEffect } from "react"
 import type { Exam, ExamPhase, RecordingSegment } from "@/lib/exam-types"
-import { sampleForAgainst } from "@/lib/sample-exam"
 import { useAudioRecorder } from "@/hooks/use-audio-recorder"
 import { ProgressStepper } from "./progress-stepper"
 import { CountdownTimer } from "./countdown-timer"
@@ -11,6 +10,7 @@ import { QuestionCard } from "./question-card"
 import { ForAgainstCard } from "./for-against-card"
 import { ExamComplete } from "./exam-complete"
 import { PartTransition } from "./part-transition"
+import { startSession } from "@/lib/api-services"
 import { Mic, Clock, Volume2, AlertCircle } from "lucide-react"
 
 interface ExamEngineProps {
@@ -44,6 +44,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const [showTransition, setShowTransition] = useState(false)
   const [transitionPartName, setTransitionPartName] = useState("")
   const [animateContent, setAnimateContent] = useState(true)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const totalTimeRef = useRef(0)
@@ -52,6 +53,13 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const currentPart = exam.parts[currentPartIndex]
   const currentQuestion = currentPart?.questions[currentQuestionIndex]
 
+  // Start session on mount
+  useEffect(() => {
+    startSession(exam.id).then((session) => {
+      if (session) setSessionId(session.id)
+    })
+  }, [exam.id])
+
   const getAudioCtx = useCallback(() => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContext()
@@ -59,42 +67,39 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     return audioCtxRef.current
   }, [])
 
-  // Louder, more distinct beep when student should start speaking
   const playStartBeep = useCallback(() => {
     try {
       const ctx = getAudioCtx()
-      // Play two-tone ascending beep (louder)
-      const osc1 = ctx.createOscillator()
-      const osc2 = ctx.createOscillator()
-      const gain1 = ctx.createGain()
-      const gain2 = ctx.createGain()
+      const t = ctx.currentTime
 
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
       osc1.connect(gain1)
       gain1.connect(ctx.destination)
+      osc1.frequency.value = 800
+      osc1.type = "sine"
+      gain1.gain.setValueAtTime(0.8, t)
+      gain1.gain.setValueAtTime(0.8, t + 0.15)
+      gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.25)
+      osc1.start(t)
+      osc1.stop(t + 0.25)
+
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
       osc2.connect(gain2)
       gain2.connect(ctx.destination)
-
-      // First tone
-      osc1.frequency.value = 660
-      osc1.type = "sine"
-      gain1.gain.setValueAtTime(0.6, ctx.currentTime)
-      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25)
-      osc1.start(ctx.currentTime)
-      osc1.stop(ctx.currentTime + 0.25)
-
-      // Second tone (higher, starts after first)
-      osc2.frequency.value = 880
+      osc2.frequency.value = 1200
       osc2.type = "sine"
-      gain2.gain.setValueAtTime(0.7, ctx.currentTime + 0.28)
-      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.7)
-      osc2.start(ctx.currentTime + 0.28)
-      osc2.stop(ctx.currentTime + 0.7)
+      gain2.gain.setValueAtTime(0.9, t + 0.3)
+      gain2.gain.setValueAtTime(0.9, t + 0.55)
+      gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.7)
+      osc2.start(t + 0.3)
+      osc2.stop(t + 0.7)
     } catch {
       // audio not available
     }
   }, [getAudioCtx])
 
-  // Warning beep for low time
   const playWarningBeep = useCallback(() => {
     try {
       const ctx = getAudioCtx()
@@ -113,7 +118,6 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     }
   }, [getAudioCtx])
 
-  // Part complete sound (triumphant)
   const playCompleteSound = useCallback(() => {
     try {
       const ctx = getAudioCtx()
@@ -196,7 +200,6 @@ export function ExamEngine({ exam }: ExamEngineProps) {
       setTimeRemaining(prepTime)
       setTimerKey((k) => k + 1)
     } else if (hasMoreParts) {
-      // Show part transition animation
       const completedPartName = currentPart.title.split(" - ")[0] || currentPart.title
       playCompleteSound()
       setTransitionPartName(completedPartName)
@@ -204,9 +207,20 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
       setTimeout(() => {
         setShowTransition(false)
-        setCurrentPartIndex((i) => i + 1)
+        const nextIdx = currentPartIndex + 1
+        const nextPart = exam.parts[nextIdx]
+        setCurrentPartIndex(nextIdx)
         setCurrentQuestionIndex(0)
-        setPhase("intro")
+
+        if (nextPart?.type === "part1_photos") {
+          setPhase("prep")
+          const prepTime = nextPart.prepTime
+          totalTimeRef.current = prepTime
+          setTimeRemaining(prepTime)
+          setTimerKey((k) => k + 1)
+        } else {
+          setPhase("intro")
+        }
         triggerAnimation()
       }, 2500)
     } else {
@@ -218,7 +232,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     currentQuestion,
     currentQuestionIndex,
     currentPartIndex,
-    exam.parts.length,
+    exam.parts,
     stopRecording,
     timeRemaining,
     playCompleteSound,
@@ -228,7 +242,6 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const handleTimerTick = useCallback(
     (time: number) => {
       setTimeRemaining(time)
-      // Warning beep at 5, 3, 2, 1 seconds
       if (phase === "answer" && [5, 3, 2, 1].includes(time)) {
         playWarningBeep()
       }
@@ -252,23 +265,22 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     }
   }, [])
 
-  // Part transition screen
   if (showTransition) {
     return <PartTransition partName={transitionPartName} />
   }
 
   if (phase === "complete") {
-    return <ExamComplete recordings={recordings} exam={exam} />
+    return <ExamComplete recordings={recordings} exam={exam} sessionId={sessionId} />
   }
 
   if (!currentPart || !currentQuestion) return null
 
   const displayPart = getDisplayPart(currentPartIndex, exam)
   const completedDisplayParts = getCompletedDisplayParts(currentPartIndex, exam)
+  const questionNumber = currentQuestionIndex
 
   return (
     <div className="mx-auto min-h-screen max-w-4xl px-4 py-6 md:py-10">
-      {/* Progress stepper */}
       <div className="mb-8 animate-fade-in md:mb-12">
         <ProgressStepper
           totalParts={3}
@@ -277,7 +289,6 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         />
       </div>
 
-      {/* Recorder error */}
       {recorderError && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 animate-scale-in">
           <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
@@ -285,13 +296,14 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         </div>
       )}
 
-      {/* Phase content */}
       {phase === "intro" && (
         <div className={animateContent ? "animate-slide-up" : "opacity-0"}>
           <PartIntro
             partNumber={currentPart.partNumber}
             title={currentPart.title}
             instruction={currentPart.instruction}
+            instructionAudio={currentPart.instructionAudio}
+            autoStart={!exam.isFree}
             onStart={handleStartPart}
           />
         </div>
@@ -299,9 +311,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
       {(phase === "prep" || phase === "answer") && (
         <div className={`flex flex-col gap-6 md:flex-row md:gap-10 ${animateContent ? "animate-fade-in" : "opacity-0"}`}>
-          {/* Question area */}
           <div className="flex-1">
-            {/* Phase indicator */}
             <div className="mb-4 flex items-center gap-3">
               {phase === "prep" ? (
                 <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)" }}>
@@ -321,24 +331,16 @@ export function ExamEngine({ exam }: ExamEngineProps) {
               )}
             </div>
 
-            {/* Question content */}
             {currentPart.type === "part3" ? (
               <ForAgainstCard
-                data={
-                  sampleForAgainst[currentQuestion.id] || {
-                    topic: currentQuestion.text,
-                    forPoints: [],
-                    againstPoints: [],
-                  }
-                }
+                question={currentQuestion}
                 questionNumber={currentQuestionIndex + 1}
               />
             ) : (
-              <QuestionCard question={currentQuestion} questionNumber={currentQuestionIndex + 1} />
+              <QuestionCard question={currentQuestion} questionNumber={questionNumber + 1} partImages={currentPart.images} />
             )}
           </div>
 
-          {/* Timer area */}
           <div className="flex flex-col items-center gap-4">
             <CountdownTimer
               key={timerKey}

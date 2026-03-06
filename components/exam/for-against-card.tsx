@@ -1,16 +1,18 @@
 "use client"
 
-import type { ForAgainstData } from "@/lib/sample-exam"
+import type { ExamQuestion } from "@/lib/exam-types"
 
 interface ForAgainstCardProps {
-  data: ForAgainstData
+  question: ExamQuestion
   questionNumber: number
 }
 
-export function ForAgainstCard({ data, questionNumber }: ForAgainstCardProps) {
+export function ForAgainstCard({ question, questionNumber }: ForAgainstCardProps) {
+  const forPoints = question.forAgainst?.filter((p) => p.side === "for") ?? []
+  const againstPoints = question.forAgainst?.filter((p) => p.side === "against") ?? []
+
   return (
     <div className="rounded-xl border-2 p-6" style={{ borderColor: "hsl(var(--exam-card-border))" }}>
-      {/* Question label */}
       <div className="mb-4">
         <span
           className="inline-block rounded-md px-3 py-1 text-sm font-semibold text-white"
@@ -20,38 +22,35 @@ export function ForAgainstCard({ data, questionNumber }: ForAgainstCardProps) {
         </span>
       </div>
 
-      {/* Topic */}
       <div className="mb-4 overflow-hidden rounded-lg border border-border">
         <div className="border-b border-border bg-muted px-4 py-3 text-center">
-          <h3 className="text-lg font-bold text-foreground">{data.topic}</h3>
+          <h3 className="text-lg font-bold text-foreground">{question.text}</h3>
         </div>
 
         <div className="grid grid-cols-2">
-          {/* FOR column */}
           <div className="border-r border-border p-4">
             <h4 className="mb-3 text-base font-bold" style={{ color: "hsl(var(--exam-primary))" }}>
               FOR
             </h4>
             <ul className="space-y-3">
-              {data.forPoints.map((point, index) => (
+              {forPoints.map((point, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm leading-relaxed text-foreground">
                   <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: "hsl(var(--exam-primary))" }} />
-                  {point}
+                  {point.pointText}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* AGAINST column */}
           <div className="p-4">
             <h4 className="mb-3 text-base font-bold" style={{ color: "hsl(var(--exam-pending))" }}>
               AGAINST
             </h4>
             <ul className="space-y-3">
-              {data.againstPoints.map((point, index) => (
+              {againstPoints.map((point, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm leading-relaxed text-foreground">
                   <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: "hsl(var(--exam-pending))" }} />
-                  {point}
+                  {point.pointText}
                 </li>
               ))}
             </ul>

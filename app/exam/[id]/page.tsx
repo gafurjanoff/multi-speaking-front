@@ -1,0 +1,105 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import { ExamEngine } from "@/components/exam/exam-engine"
+import { ExamLobby } from "@/components/exam/exam-lobby"
+import { PaymentRequired } from "@/components/exam/payment-required"
+import { fetchExamDetail } from "@/lib/api-services"
+import { fetchWithAuth } from "@/lib/api-client"
+import type { Exam } from "@/lib/exam-types"
+
+export default function ExamByIdPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { user, isLoading: authLoading } = useAuth()
+  const [exam, setExam] = useState<Exam | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [started, setStarted] = useState(false)
+  const [paymentRequired, setPaymentRequired] = useState(false)
+  const [examMeta, setExamMeta] = useState<{ title: string; level: string } | null>(null)
+
+  const examId = params?.id as string
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login/otp")
+      return
+    }
+    if (!examId || !user) return
+
+    setLoading(true)
+
+    async function loadExam() {
+      try {
+        const data = await fetchExamDetail(examId)
+        if (data) {
+          setExam(data)
+          setLoading(false)
+          return
+        }
+      } catch {
+        // might be 403 payment_required
+      }
+
+      try {
+        const accessRes = await fetchWithAuth("/api/exams/" + examId + "/access")
+        if (accessRes.ok) {
+          const accessData = await accessRes.json()
+          if (!accessData.has_access) {
+            setExamMeta({ title: "Paid Exam", level: "" })
+            setPaymentRequired(true)
+            setLoading(false)
+            return
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      setError("Exam not found or you don't have access.")
+      setLoading(false)
+    }
+
+    loadExam()
+  }, [examId, user, authLoading, router])
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+      </div>
+    )
+  }
+
+  if (paymentRequired && examMeta) {
+    return <PaymentRequired examTitle={examMeta.title} examLevel={examMeta.level} />
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="rounded-xl border border-border bg-card px-8 py-6 text-center">
+          <p className="mb-4 text-lg font-semibold text-foreground">{error}</p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ backgroundColor: "hsl(var(--exam-primary))" }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!exam) return null
+
+  if (!started) {
+    return <ExamLobby exam={exam} onStart={() => setStarted(true)} />
+  }
+
+  return <ExamEngine exam={exam} />
+}

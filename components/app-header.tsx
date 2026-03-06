@@ -1,12 +1,22 @@
-"use client"
+ "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useTheme } from "next-themes"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
-import { Mic, LogOut, User, LayoutDashboard } from "lucide-react"
+import { Mic, LogOut, User, LayoutDashboard, Sun, Moon, Shield } from "lucide-react"
 
 export function AppHeader() {
   const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const isDark = theme === "dark"
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -21,10 +31,37 @@ export function AppHeader() {
           <span className="text-lg font-bold text-foreground">SpeakExam</span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Theme toggle */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Toggle dark mode"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+          >
+            {/* Avoid hydration mismatch by rendering a neutral placeholder until mounted */}
+            {!mounted ? (
+              <span className="inline-block h-4 w-4 rounded-full bg-muted" />
+            ) : isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+
           {user ? (
             <>
-              <Link href={user.role === "teacher" ? "/teacher" : "/dashboard"}>
+              {user.isAdmin && (
+                <Link href="/admin">
+                  <Button variant="ghost" size="sm" className="gap-2 text-foreground">
+                    <Shield className="h-4 w-4" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </Button>
+                </Link>
+              )}
+              <Link href="/dashboard">
                 <Button variant="ghost" size="sm" className="gap-2 text-foreground">
                   <LayoutDashboard className="h-4 w-4" />
                   <span className="hidden sm:inline">Dashboard</span>
@@ -50,7 +87,7 @@ export function AppHeader() {
               </Button>
             </>
           ) : (
-            <Link href="/login">
+            <Link href="/login/otp">
               <Button
                 size="sm"
                 className="gap-2 text-white"

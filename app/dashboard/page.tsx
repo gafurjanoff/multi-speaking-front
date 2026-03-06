@@ -1,46 +1,66 @@
 "use client"
 
-import React from "react"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { AppHeader } from "@/components/app-header"
-import { ExamCardItem } from "@/components/exam-card"
-import { Button } from "@/components/ui/button"
-import {
-  BookOpen,
-  TrendingUp,
-  Award,
-  Clock,
-  Target,
-  Flame,
-  ArrowRight,
-  ChevronRight,
-  BarChart3,
-  History,
-} from "lucide-react"
-import { sampleExamCards } from "@/lib/sample-data"
-import { sampleStudentProgress } from "@/lib/sample-data"
-import { sampleStudents } from "@/lib/sample-data"
-import type { ExamCard } from "@/lib/api-types"
-import type { StudentProgress } from "@/lib/api-types"
+import { BookOpen, Trophy, Clock } from "lucide-react"
+import { fetchExams, fetchMyResults, type UserResult } from "@/lib/api-services"
+import type { ExamCard, ExamResult } from "@/lib/api-types"
+
+import { ProfileHeader } from "@/components/dashboard/profile-header"
+import { StatCard } from "@/components/dashboard/stat-card"
+import { DashboardTabs, type DashboardTab } from "@/components/dashboard/dashboard-tabs"
+import { OverviewTab } from "@/components/dashboard/overview-tab"
+import { ExamsTab } from "@/components/dashboard/exams-tab"
+import { LeaderboardTab, type LeaderboardEntry } from "@/components/dashboard/leaderboard-tab"
+
+function mapBackendResult(r: UserResult): ExamResult {
+  return {
+    id: r.id,
+    examId: r.exam_id,
+    examTitle: r.exam_title,
+    studentId: "",
+    studentName: "",
+    studentEmail: "",
+    level: "",
+    completedAt: r.completed_at ?? new Date().toISOString(),
+    recordings: [],
+    totalDuration: 0,
+    status: r.status as ExamResult["status"],
+    score: r.overall_score ?? undefined,
+    feedback: r.feedback ?? undefined,
+  }
+}
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<"overview" | "exams" | "progress">("overview")
-  const [levelFilter, setLevelFilter] = useState<string>("all")
+  const searchParams = useSearchParams()
+  const [showAdminDenied, setShowAdminDenied] = useState(false)
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview")
+  const [examCards, setExamCards] = useState<ExamCard[]>([])
+  const [results, setResults] = useState<ExamResult[]>([])
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push("/login")
-    }
-    if (!isLoading && user && user.role === "teacher") {
-      router.push("/teacher")
+      router.push("/login/otp")
     }
   }, [user, isLoading, router])
+
+  useEffect(() => {
+    if (!user) return
+    fetchExams().then((data) => setExamCards(data))
+    fetchMyResults().then((data) => setResults(data.map(mapBackendResult)))
+  }, [user])
+
+  useEffect(() => {
+    if (searchParams.get("admin_denied") === "1") {
+      setShowAdminDenied(true)
+      const t = setTimeout(() => setShowAdminDenied(false), 5000)
+      return () => clearTimeout(t)
+    }
+  }, [searchParams])
 
   if (isLoading || !user) {
     return (
@@ -50,268 +70,78 @@ export default function DashboardPage() {
     )
   }
 
-  const student = sampleStudents.find((s) => s.id === user.id) || sampleStudents[0]
-  const progress = sampleStudentProgress
-  const exams = sampleExamCards
-  const filteredExams = levelFilter === "all" ? exams : exams.filter((e) => e.level === levelFilter)
-  const freeExams = exams.filter((e) => e.isFree)
+  const completedResults = results.filter((r) => r.score !== undefined)
 
-  const tabs = [
-    { id: "overview" as const, label: "Overview", icon: BarChart3 },
-    { id: "exams" as const, label: "Exams", icon: BookOpen },
-    { id: "progress" as const, label: "Progress", icon: TrendingUp },
-  ]
+  const examsTaken = results.length
+  const bestScore75 =
+    completedResults.length > 0
+      ? Math.max(
+          ...completedResults
+            .map((r) => r.score ?? 0)
+            .map((pct) => Math.round((pct / 100) * 75))
+        )
+      : 0
+  const certificatesCount = completedResults.length
+
+  const latestResult =
+    completedResults.length > 0
+      ? [...completedResults].sort(
+          (a, b) =>
+            new Date(b.completedAt).getTime() -
+            new Date(a.completedAt).getTime()
+        )[0]
+      : null
+
+  const userAveragePercent =
+    completedResults.length > 0
+      ? Math.round(
+          completedResults.reduce((sum, r) => sum + (r.score ?? 0), 0) /
+            completedResults.length
+        )
+      : 0
+
+  const leaderboard: LeaderboardEntry[] = [
+    {
+      id: user.id,
+      name: user.name,
+      totalExamsTaken: examsTaken,
+      averageScore: userAveragePercent,
+    },
+  ].sort((a, b) => b.averageScore - a.averageScore)
 
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
+      {showAdminDenied && (
+        <div className="mx-auto max-w-6xl px-4 pt-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+            Access denied. Admin area is restricted to administrators only.
+          </div>
+        </div>
+      )}
+
 
       <main className="mx-auto max-w-6xl px-4 py-8">
-        {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="mb-1 text-2xl font-bold text-foreground">
-            Welcome back, {user.name.split(" ")[0]}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Track your progress and practice speaking exams
-          </p>
+        <ProfileHeader user={user} />
+
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard icon={BookOpen} label="Exams taken" value={examsTaken} />
+          <StatCard icon={Trophy} label="Best score (/75)" value={bestScore75} />
+          <StatCard icon={Clock} label="Certificates" value={certificatesCount} />
         </div>
 
-        {/* Stat cards */}
-        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon={BookOpen} label="Exams Taken" value={student.totalExamsTaken} color="174 42% 51%" />
-          <StatCard icon={Target} label="Avg Score" value={`${student.averageScore}%`} color="32 85% 55%" />
-          <StatCard icon={Flame} label="Day Streak" value={student.streak} color="0 84% 60%" />
-          <StatCard icon={Award} label="Badges" value={student.badges.length} color="210 11% 25%" />
-        </div>
+        <DashboardTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-xl bg-muted p-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
         {activeTab === "overview" && (
-          <div className="space-y-8">
-            {/* Free mock exams */}
-            <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Free Mock Exams</h2>
-                <button
-                  type="button"
-                  onClick={() => { setActiveTab("exams"); setLevelFilter("all"); }}
-                  className="flex items-center gap-1 text-sm font-medium transition-colors hover:text-foreground"
-                  style={{ color: "hsl(var(--exam-primary))" }}
-                >
-                  View all
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {freeExams.slice(0, 3).map((exam) => (
-                  <ExamCardItem key={exam.id} exam={exam} />
-                ))}
-              </div>
-            </section>
-
-            {/* Recent activity */}
-            <section>
-              <h2 className="mb-4 text-lg font-bold text-foreground">Recent Activity</h2>
-              <div className="space-y-3">
-                {progress.recentActivity.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 transition-colors hover:bg-muted/50"
-                  >
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)" }}
-                    >
-                      {activity.type === "exam_completed" && <BookOpen className="h-5 w-5" style={{ color: "hsl(var(--exam-primary))" }} />}
-                      {activity.type === "score_received" && <Target className="h-5 w-5" style={{ color: "hsl(var(--exam-primary))" }} />}
-                      {activity.type === "badge_earned" && <Award className="h-5 w-5" style={{ color: "hsl(var(--exam-primary))" }} />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-foreground">{activity.title}</p>
-                      <p className="text-xs text-muted-foreground">{activity.description}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(activity.timestamp).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+          <OverviewTab examCards={examCards} latestResult={latestResult} />
         )}
 
-        {activeTab === "exams" && (
-          <div>
-            {/* Level filter */}
-            <div className="mb-6 flex flex-wrap gap-2">
-              {["all", "B1", "B2", "C1"].map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setLevelFilter(level)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                    levelFilter === level
-                      ? "text-white shadow-sm"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                  style={levelFilter === level ? { backgroundColor: "hsl(var(--exam-primary))" } : undefined}
-                >
-                  {level === "all" ? "All Levels" : level}
-                </button>
-              ))}
-            </div>
+        {activeTab === "exams" && <ExamsTab results={results} />}
 
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredExams.map((exam) => (
-                <ExamCardItem key={exam.id} exam={exam} />
-              ))}
-            </div>
-
-            {filteredExams.length === 0 && (
-              <div className="py-16 text-center">
-                <p className="text-muted-foreground">No exams found for this level.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "progress" && (
-          <div className="space-y-8">
-            {/* Level progress */}
-            <section>
-              <h2 className="mb-4 text-lg font-bold text-foreground">Progress by Level</h2>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {progress.progressByLevel.map((lp) => (
-                  <div key={lp.level} className="rounded-xl border border-border bg-card p-5">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-lg font-bold text-foreground">{lp.level}</span>
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {lp.completed}/{lp.total}
-                      </span>
-                    </div>
-                    <div className="mb-2 h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${(lp.completed / lp.total) * 100}%`,
-                          backgroundColor: "hsl(var(--exam-primary))",
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Avg score: <span className="font-semibold text-foreground">{lp.averageScore}%</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Exam history */}
-            <section>
-              <h2 className="mb-4 text-lg font-bold text-foreground">Exam History</h2>
-              <div className="space-y-3">
-                {progress.examHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4"
-                  >
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-foreground">{item.examTitle}</p>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{item.level}</span>
-                        <span>{new Date(item.completedAt).toLocaleDateString()}</span>
-                        <span>{Math.floor(item.duration / 60)} min</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {item.status === "graded" ? (
-                        <span className="text-lg font-bold text-foreground">{item.score}%</span>
-                      ) : (
-                        <span
-                          className="inline-flex rounded-full px-3 py-1 text-xs font-medium"
-                          style={{
-                            backgroundColor: "hsl(var(--exam-pending) / 0.15)",
-                            color: "hsl(var(--exam-pending))",
-                          }}
-                        >
-                          {item.status === "pending_review" ? "Pending" : "Reviewed"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Badges */}
-            <section>
-              <h2 className="mb-4 text-lg font-bold text-foreground">Badges Earned</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {student.badges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    className="flex items-center gap-4 rounded-xl border border-border bg-card p-4"
-                  >
-                    <div
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg"
-                      style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)" }}
-                    >
-                      {badge.icon === "trophy" && <Award className="h-6 w-6" style={{ color: "hsl(var(--exam-primary))" }} />}
-                      {badge.icon === "flame" && <Flame className="h-6 w-6" style={{ color: "hsl(var(--exam-recording))" }} />}
-                      {badge.icon === "star" && <Target className="h-6 w-6" style={{ color: "hsl(var(--exam-pending))" }} />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{badge.name}</p>
-                      <p className="text-xs text-muted-foreground">{badge.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+        {activeTab === "leaderboard" && (
+          <LeaderboardTab entries={leaderboard} currentUserId={user.id} />
         )}
       </main>
-    </div>
-  )
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-  color: string
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: `hsl(${color} / 0.1)` }}>
-        <Icon className="h-5 w-5" style={{ color: `hsl(${color})` }} />
-      </div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   )
 }
