@@ -182,6 +182,8 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         {
           partId: currentPart.id,
           questionId: currentQuestion.id,
+          partOrder: currentPartIndex,
+          questionOrder: currentQuestionIndex,
           blob,
           duration: currentPart.answerTime - timeRemaining,
         },

@@ -63,7 +63,7 @@ export function OverviewTab({ examCards, latestResult }: OverviewTabProps) {
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Score (/75)</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {Math.round(((latestResult.score ?? 0) / 100) * 75)}
+                  {Math.round(latestResult.score ?? 0)}
                 </p>
               </div>
               <Link href={`/certificate/${latestResult.id}`}>

@@ -5,12 +5,15 @@ import {
   adminFetchResults,
   adminFetchResultDetail,
   adminGradeResult,
+  adminAiAssess,
   type AdminResult,
+  type AiAssessResponse,
   type AdminResultDetail,
 } from "@/lib/api-services"
+import { ResultRecordingsView } from "@/components/result-recordings-view"
+import { getRecordingUrl } from "@/lib/recording-url"
 import {
   ArrowLeft,
-  Play,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -42,6 +45,13 @@ export default function AdminResultsPage() {
     if (data) setDetail(data)
   }
 
+  const refetchDetail = async () => {
+    if (detail) {
+      const data = await adminFetchResultDetail(detail.id)
+      if (data) setDetail(data)
+    }
+  }
+
   if (detail) {
     return (
       <ResultDetail
@@ -50,6 +60,7 @@ export default function AdminResultsPage() {
           setDetail(null)
           loadResults()
         }}
+        onRefetch={refetchDetail}
       />
     )
   }
@@ -121,7 +132,7 @@ export default function AdminResultsPage() {
                 className="grid grid-cols-[1fr_1fr_100px_120px_100px] items-center gap-3 border-t border-border px-5 py-3.5 transition-colors hover:bg-muted/30"
               >
                 <span className="truncate text-sm font-medium text-foreground">
-                  {r.exam_id.slice(0, 8)}...
+                  {r.exam_title || r.exam_id.slice(0, 8) + "..."}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {new Date(r.created_at).toLocaleDateString("en-GB", {
@@ -181,24 +192,52 @@ export default function AdminResultsPage() {
 function ResultDetail({
   result,
   onBack,
+  onRefetch,
 }: {
   result: AdminResultDetail
   onBack: () => void
+  onRefetch?: () => Promise<void>
 }) {
   const [score, setScore] = useState(result.overall_score?.toString() ?? "")
   const [feedback, setFeedback] = useState(result.feedback ?? "")
   const [notes, setNotes] = useState(result.teacher_notes ?? "")
   const [submitting, setSubmitting] = useState(false)
   const [graded, setGraded] = useState(result.status === "graded")
+  const [aiAssessing, setAiAssessing] = useState(false)
+  const [aiScores, setAiScores] = useState<Record<string, { score: number; feedback: string }>>({})
+  const [recordingScores, setRecordingScores] = useState<{ recording_id: string; score?: number; feedback?: string }[]>([])
+
+  const handleAiAssess = async () => {
+    setAiAssessing(true)
+    const data = await adminAiAssess(result.id)
+    setAiAssessing(false)
+    if (!data || data.error) {
+      alert(data?.error || "AI assessment failed")
+      return
+    }
+    const map: Record<string, { score: number; feedback: string }> = {}
+    const recs: { recording_id: string; score?: number; feedback?: string }[] = []
+    for (const rs of data.recording_scores) {
+      if (rs.score != null) {
+        map[rs.recording_id] = { score: rs.score, feedback: rs.feedback || "" }
+        recs.push({ recording_id: rs.recording_id, score: rs.score, feedback: rs.feedback || undefined })
+      }
+    }
+    setAiScores(map)
+    setRecordingScores(recs)
+    if (data.conversion_score != null) setScore(String(data.conversion_score))
+    await onRefetch?.()
+  }
 
   const handleGrade = async () => {
     const numScore = parseFloat(score)
-    if (isNaN(numScore) || numScore < 0 || numScore > 100) return
+    if (isNaN(numScore) || numScore < 0 || numScore > 75) return
     setSubmitting(true)
     const ok = await adminGradeResult(result.id, {
       overall_score: numScore,
       feedback: feedback || undefined,
       teacher_notes: notes || undefined,
+      recording_scores: recordingScores.length > 0 ? recordingScores : undefined,
     })
     setSubmitting(false)
     if (ok) setGraded(true)
@@ -214,7 +253,7 @@ function ResultDetail({
         Back to results
       </button>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         {/* Info card */}
         <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-1">
           <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
@@ -243,38 +282,30 @@ function ResultDetail({
         </div>
 
         {/* Main content */}
-        <div className="space-y-5 lg:col-span-2">
-          {/* Recordings */}
-          {result.recordings.length > 0 && (
+        <div className="space-y-5 lg:col-span-1">
+          {/* Recordings - full exam structure */}
+          {((result.parts?.length ?? 0) > 0 || result.recordings.length > 0) && (
             <div className="rounded-2xl border border-border bg-card p-5">
               <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Recordings ({result.recordings.length})
+                Exam & Recordings ({result.recordings.length} recordings)
               </h3>
-              <div className="space-y-2">
-                {result.recordings.map((rec) => (
-                  <div
-                    key={rec.id}
-                    className="flex items-center justify-between rounded-xl border border-border px-4 py-3 transition-colors hover:bg-muted/30"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {rec.part_id} &middot; {rec.question_id}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{rec.duration}s</p>
+              {(result.parts?.length ?? 0) > 0 ? (
+                <ResultRecordingsView parts={result.parts ?? []} recordings={result.recordings} showScores={graded || Object.keys(aiScores).length > 0} aiScores={aiScores} />
+              ) : (
+                <div className="space-y-4">
+                  {result.recordings.map((rec, idx) => (
+                    <div key={rec.id} className="rounded-xl border border-border bg-muted/20 p-4">
+                      <p className="text-xs font-semibold text-muted-foreground">{rec.part_label || `Part ${idx + 1}`}</p>
+                      <p className="mt-1 text-sm font-medium text-foreground">{rec.question_text || "Question"}</p>
+                      {rec.file_path ? (
+                        <audio controls preload="none" className="h-9 w-full max-w-md mt-2" src={getRecordingUrl(rec.file_path)} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No file</span>
+                      )}
                     </div>
-                    {rec.file_path ? (
-                      <audio
-                        controls
-                        preload="none"
-                        className="h-8"
-                        src={rec.file_path.replace(/.*uploads/, "/uploads")}
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">No file</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -286,12 +317,12 @@ function ResultDetail({
             <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Overall Score (0–100)
+                  Overall Score (0–75)
                 </label>
                 <input
                   type="number"
                   min={0}
-                  max={100}
+                  max={75}
                   value={score}
                   onChange={(e) => setScore(e.target.value)}
                   disabled={graded}
@@ -325,6 +356,13 @@ function ResultDetail({
                   placeholder="Internal notes..."
                 />
               </div>
+              <button
+                onClick={handleAiAssess}
+                disabled={aiAssessing}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold border border-border text-foreground hover:bg-muted transition-all disabled:opacity-50 mr-3"
+              >
+                {aiAssessing ? "Assessing..." : graded ? "Re-run AI assessment" : "Run AI assessment"}
+              </button>
               {!graded && (
                 <button
                   onClick={handleGrade}

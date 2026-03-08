@@ -75,11 +75,7 @@ export default function DashboardPage() {
   const examsTaken = results.length
   const bestScore75 =
     completedResults.length > 0
-      ? Math.max(
-          ...completedResults
-            .map((r) => r.score ?? 0)
-            .map((pct) => Math.round((pct / 100) * 75))
-        )
+      ? Math.max(...completedResults.map((r) => Math.round(r.score ?? 0)))
       : 0
   const certificatesCount = completedResults.length
 

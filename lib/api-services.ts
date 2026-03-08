@@ -46,7 +46,7 @@ export interface BackendExamDetail {
   level: string
   is_free?: boolean
   is_mock?: boolean
-  parts: {
+  parts?: {
     id: string
     type: string
     title: string
@@ -73,7 +73,7 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
     level: b.level,
     isFree: b.is_free,
     isMock: b.is_mock,
-    parts: b.parts.map((p) => ({
+    parts: (b.parts ?? []).map((p) => ({
       id: p.id,
       type: p.type as Exam["parts"][number]["type"],
       title: p.title,
@@ -83,7 +83,7 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
       images: p.images,
       prepTime: p.prep_time,
       answerTime: p.answer_time,
-      questions: p.questions.map((q) => ({
+      questions: (p.questions ?? []).map((q) => ({
         id: q.id,
         text: q.text,
         subQuestions: q.sub_questions,
@@ -138,12 +138,16 @@ export async function uploadRecording(
   sessionId: string,
   partId: string,
   questionId: string,
+  partOrder: number,
+  questionOrder: number,
   blob: Blob,
   duration: number
 ): Promise<boolean> {
   const form = new FormData()
   form.append("part_id", partId)
   form.append("question_id", questionId)
+  form.append("part_order", String(partOrder))
+  form.append("question_order", String(questionOrder))
   form.append("duration", String(duration))
   form.append("file", blob, `${partId}_${questionId}.webm`)
 
@@ -169,6 +173,61 @@ export interface UserResult {
 export async function fetchMyResults(): Promise<UserResult[]> {
   const res = await fetchWithAuth("/api/sessions/my/results")
   if (!res.ok) return []
+  return res.json()
+}
+
+// ── Result detail (candidate sees own recordings + questions) ──
+
+export interface CandidateResultDetail {
+  id: string
+  session_id: string
+  exam_id: string
+  user_id: string
+  status: string
+  overall_score: number | null
+  feedback: string | null
+  teacher_notes: string | null
+  graded_at: string | null
+  created_at: string
+  exam_title: string
+  student_name: string
+  student_phone: string
+  recordings: {
+    id: string
+    part_id: string
+    question_id: string
+    part_label: string
+    question_text: string
+    file_path: string | null
+    duration: number
+    score: number | null
+    feedback: string | null
+  }[]
+  parts?: {
+    part_id: string
+    part_title: string
+    part_order: number
+    part_type?: string
+    part_images?: string[] | null
+    questions: {
+      question_id: string
+      question_text: string
+      question_order: number
+      recording_id: string | null
+      file_path: string | null
+      duration: number
+      score: number | null
+      feedback: string | null
+      images?: string[] | null
+      sub_questions?: string[] | null
+      for_against?: { side: string; point_text: string }[]
+    }[]
+  }[]
+}
+
+export async function fetchResultDetail(resultId: string): Promise<CandidateResultDetail | null> {
+  const res = await fetchWithAuth(`/api/sessions/results/${resultId}`)
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -305,6 +364,7 @@ export interface AdminResult {
   id: string
   session_id: string
   exam_id: string
+  exam_title?: string
   user_id: string
   status: string
   overall_score: number | null
@@ -322,10 +382,32 @@ export interface AdminResultDetail extends AdminResult {
     id: string
     part_id: string
     question_id: string
+    part_label: string
+    question_text: string
     file_path: string | null
     duration: number
     score: number | null
     feedback: string | null
+  }[]
+  parts?: {
+    part_id: string
+    part_title: string
+    part_order: number
+    part_type?: string
+    part_images?: string[] | null
+    questions: {
+      question_id: string
+      question_text: string
+      question_order: number
+      recording_id: string | null
+      file_path: string | null
+      duration: number
+      score: number | null
+      feedback: string | null
+      images?: string[] | null
+      sub_questions?: string[] | null
+      for_against?: { side: string; point_text: string }[]
+    }[]
   }[]
 }
 
@@ -360,6 +442,21 @@ export async function adminGradeResult(
     body: JSON.stringify(body),
   })
   return res.ok
+}
+
+export interface AiAssessResponse {
+  error?: string
+  recording_scores: { recording_id: string; score: number | null; feedback: string }[]
+  criteria_total?: number
+  conversion_score?: number
+}
+
+export async function adminAiAssess(resultId: string): Promise<AiAssessResponse | null> {
+  const res = await fetchWithAuth(`/api/admin/results/${resultId}/ai-assess`, {
+    method: "POST",
+  })
+  if (!res.ok) return null
+  return res.json()
 }
 
 // ── Exam Access (paid exam approval) ──

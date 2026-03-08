@@ -30,11 +30,12 @@ export default function CertificatePage({
             studentEmail: "",
             level: "",
             completedAt: data.created_at,
-            recordings: [],
+            recordings: data.recordings ?? [],
             totalDuration: 0,
             status: data.status,
             score: data.overall_score ?? undefined,
             feedback: data.feedback ?? undefined,
+            parts: data.parts,
           })
         }
         setLoading(false)

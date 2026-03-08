@@ -45,6 +45,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
             sessionId!,
             rec.partId,
             rec.questionId,
+            rec.partOrder,
+            rec.questionOrder,
             rec.blob,
             rec.duration
           )

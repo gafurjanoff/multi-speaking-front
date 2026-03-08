@@ -38,6 +38,8 @@ export interface Exam {
 export interface RecordingSegment {
   partId: string
   questionId: string
+  partOrder: number
+  questionOrder: number
   blob: Blob
   duration: number
 }

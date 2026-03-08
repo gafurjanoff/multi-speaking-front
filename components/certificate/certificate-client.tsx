@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { ExamResult, StudentProfile } from "@/lib/api-types"
+import type { ExamResult, RecordingResult, StudentProfile } from "@/lib/api-types"
 import { CertTopBar } from "./cert-top-bar"
 import { CertHeader } from "./cert-header"
 import { CertAwardee } from "./cert-awardee"
@@ -17,7 +17,7 @@ interface CertificateClientProps {
 export function CertificateClient({ result, student }: CertificateClientProps) {
   const score75 =
     result.score !== undefined
-      ? Math.round((result.score / 100) * 75)
+      ? Math.round(result.score)
       : undefined
   const fullName = student?.name ?? result.studentName
 
@@ -47,7 +47,16 @@ export function CertificateClient({ result, student }: CertificateClientProps) {
               completedAt={result.completedAt}
             />
             {score75 !== undefined && <ScoreBandsGrid score75={score75} />}
-            {result.feedback && <CertFeedback feedback={result.feedback} />}
+            {result.feedback && (
+              <CertFeedback
+                feedback={result.feedback}
+                sections={(result.recordings || []).map((r) => ({
+                  part_label: r.part_label ?? r.partTitle ?? "",
+                  question_text: r.question_text ?? r.questionText ?? "",
+                  feedback: r.feedback,
+                }))}
+              />
+            )}
             <div className="cert-watermark">SpeakExam &middot; Mock Certificate</div>
           </div>
         </div>

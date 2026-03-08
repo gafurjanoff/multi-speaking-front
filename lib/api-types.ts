@@ -89,6 +89,7 @@ export interface ExamResult {
   score?: number
   feedback?: string
   teacherNotes?: string
+  parts?: { part_title: string; part_order: number; questions: { question_text: string; feedback?: string }[] }[]
 }
 
 export interface RecordingResult {
@@ -100,6 +101,9 @@ export interface RecordingResult {
   duration: number
   score?: number
   feedback?: string
+  /** API returns snake_case */
+  part_label?: string
+  question_text?: string
 }
 
 // --- Student Progress ---
