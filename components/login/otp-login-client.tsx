@@ -49,7 +49,11 @@ export function OtpLoginClient() {
           }
           return "Could not send code. Start the Telegram bot first and share your phone."
         })()
-        setError(message)
+        const isUserNotFound = typeof message === "string" && (
+          message.toLowerCase().includes("user not found") ||
+          message.toLowerCase().includes("not found")
+        )
+        setError(isUserNotFound ? "USER_NOT_FOUND" : message)
         setIsSubmitting(false)
         return
       }
@@ -120,6 +124,24 @@ export function OtpLoginClient() {
                 We&apos;ll send a one-time code via Telegram. Use the number you
                 registered in the bot.
               </p>
+
+              <div className="bot-callout">
+                <strong>First time?</strong> Open our{" "}
+                {botUsername ? (
+                  <a
+                    href={`https://t.me/${botUsername}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bot-link"
+                  >
+                    @{botUsername}
+                  </a>
+                ) : (
+                  "Telegram bot"
+                )}{" "}
+                → tap <strong>Start</strong> → share your phone number. Then come back here.
+              </div>
+
               <div className="heading-divider" />
 
               <form onSubmit={handleRequestCode}>
@@ -137,13 +159,12 @@ export function OtpLoginClient() {
                     required
                   />
                   <p className="form-hint">
-                    Format: +998XXXXXXXXX &middot; Must match your Telegram bot
-                    number
+                    Format: +998XXXXXXXXX — Must match the number you shared in the bot
                   </p>
                 </div>
 
                 {error && (
-                  <div className="error-box">
+                  <div className={`error-box ${error === "USER_NOT_FOUND" ? "error-user-not-found" : ""}`}>
                     <svg fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
@@ -151,7 +172,21 @@ export function OtpLoginClient() {
                         d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
                       />
                     </svg>
-                    {error}
+                    <div>
+                      {error === "USER_NOT_FOUND" ? (
+                        <>
+                          <strong>Account not found.</strong> To sign in, you must first register via our Telegram bot:
+                          <ol className="error-steps">
+                            <li>Open {botUsername ? <a href={`https://t.me/${botUsername}`} target="_blank" rel="noopener noreferrer">@{botUsername}</a> : "our Telegram bot"}</li>
+                            <li>Tap <strong>Start</strong></li>
+                            <li>Share your phone number when asked</li>
+                            <li>Return here and enter the same number</li>
+                          </ol>
+                        </>
+                      ) : (
+                        error
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -174,22 +209,6 @@ export function OtpLoginClient() {
                   )}
                 </button>
               </form>
-
-              <div className="footer-note">
-                First time? Open our{" "}
-                {botUsername ? (
-                  <a
-                    href={`https://t.me/${botUsername}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Telegram bot
-                  </a>
-                ) : (
-                  "Telegram bot"
-                )}{" "}
-                and send /start, then share your phone number.
-              </div>
             </>
           ) : (
             <>

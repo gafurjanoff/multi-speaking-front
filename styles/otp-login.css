@@ -344,3 +344,52 @@
 }
 .otp-page .code-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
 .otp-page .code-banner strong { font-weight: 500; color: var(--text); }
+
+/* ── Larger instructions & bot callout ── */
+.otp-page .card-subheading {
+  font-size: 15px;
+}
+.otp-page .form-hint {
+  font-size: 14px;
+}
+
+.otp-page .bot-callout {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 24px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.otp-page .bot-callout .bot-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.otp-page .bot-callout .bot-link:hover {
+  text-decoration: underline;
+}
+
+/* User not found error - larger, step-by-step */
+.otp-page .error-box.error-user-not-found {
+  font-size: 15px;
+  padding: 18px 20px;
+}
+.otp-page .error-steps {
+  margin: 12px 0 0 0;
+  padding-left: 20px;
+  line-height: 1.8;
+}
+.otp-page .error-steps li {
+  margin-bottom: 4px;
+}
+.otp-page .error-steps a {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+.otp-page .error-steps a:hover {
+  text-decoration: underline;
+}
