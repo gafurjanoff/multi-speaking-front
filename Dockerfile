@@ -1,7 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Multilevel Speaking Exam - Frontend (Next.js)
-# Multi-stage build for production deployment
-# ─────────────────────────────────────────────────────────────────────────────
 
 FROM node:20-alpine AS base
 WORKDIR /app
@@ -11,7 +7,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml* package-lock.json* ./
 RUN \
   if [ -f pnpm-lock.yaml ]; then \
-    corepack enable pnpm && pnpm install --frozen-lockfile; \
+    corepack enable pnpm && pnpm install --no-frozen-lockfile; \
   elif [ -f package-lock.json ]; then \
     npm ci --legacy-peer-deps; \
   else \
