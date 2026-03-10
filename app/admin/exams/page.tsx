@@ -205,70 +205,119 @@ export default function AdminExamsPage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="grid grid-cols-[1fr_80px_80px_80px_120px] items-center gap-3 border-b border-border bg-muted/50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Exam</span>
-            <span className="text-center">Level</span>
-            <span className="text-center">Parts</span>
-            <span className="text-center">Type</span>
-            <span className="text-right">Actions</span>
-          </div>
-          {filtered.map((exam) => (
-            <div
-              key={exam.id}
-              className="grid grid-cols-[1fr_80px_80px_80px_120px] items-center gap-3 border-t border-border px-5 py-3.5 transition-colors hover:bg-muted/30"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {exam.title}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {exam.questionsCount} questions
-                </p>
-              </div>
-              <span className="text-center">
-                <span className="inline-block rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
-                  {exam.level}
-                </span>
-              </span>
-              <span className="text-center text-sm text-muted-foreground">
-                {exam.totalParts}
-              </span>
-              <span className="text-center">
-                {exam.isFree ? (
-                  <span className="inline-block rounded-md bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    Free
-                  </span>
-                ) : (
-                  <span className="inline-block rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                    Paid
-                  </span>
-                )}
-              </span>
-              <div className="flex items-center justify-end gap-1">
-                <button
-                  onClick={() => handleTogglePublish(exam)}
-                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="Toggle publish"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setEditingExam(exam)}
-                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(exam.id)}
-                  className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="grid grid-cols-[1fr_80px_80px_80px_120px] items-center gap-3 border-b border-border bg-muted/50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>Exam</span>
+              <span className="text-center">Level</span>
+              <span className="text-center">Parts</span>
+              <span className="text-center">Type</span>
+              <span className="text-right">Actions</span>
             </div>
-          ))}
-        </div>
+            {filtered.map((exam) => (
+              <div
+                key={exam.id}
+                className="grid grid-cols-[1fr_80px_80px_80px_120px] items-center gap-3 border-t border-border px-5 py-3.5 transition-colors hover:bg-muted/30"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {exam.title}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {exam.questionsCount} questions
+                  </p>
+                </div>
+                <span className="text-center">
+                  <span className="inline-block rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
+                    {exam.level}
+                  </span>
+                </span>
+                <span className="text-center text-sm text-muted-foreground">
+                  {exam.totalParts}
+                </span>
+                <span className="text-center">
+                  {exam.isFree ? (
+                    <span className="inline-block rounded-md bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      Free
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                      Paid
+                    </span>
+                  )}
+                </span>
+                <div className="flex items-center justify-end gap-1">
+                  <button
+                    onClick={() => handleTogglePublish(exam)}
+                    className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    title="Toggle publish"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setEditingExam(exam)}
+                    className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(exam.id)}
+                    className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Mobile card view */}
+          <div className="space-y-3 md:hidden">
+            {filtered.map((exam) => (
+              <div key={exam.id} className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{exam.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{exam.questionsCount} questions · {exam.totalParts} parts</p>
+                  </div>
+                  <span className="inline-block shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
+                    {exam.level}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>
+                    {exam.isFree ? (
+                      <span className="inline-block rounded-md bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">Free</span>
+                    ) : (
+                      <span className="inline-block rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Paid</span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleTogglePublish(exam)}
+                      className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditingExam(exam)}
+                      className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(exam.id)}
+                      className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -306,7 +355,7 @@ const PART_TYPES: { value: PartDraft["type"]; label: string }[] = [
 ]
 
 const INSTRUCTION_PART1 =
-  "In this part, I'm going to ask you three short questions about yourself and your interests. And then, you will see some photos and answer some questions about them. You will have 30 seconds to reply to each question. Begin speaking when you hear this sound."
+  "I will ask you some questions about yourself, then show you some photos to discuss. You have 30 seconds for the personal questions and 45 seconds for the photo questions. Please start speaking when you hear this sound."
 
 const INSTRUCTION_PART2 =
   "In this part, I'm going to show you a picture and ask you three questions. You will have one minute to think about your answers before you start speaking. You will have two minutes to answer all three questions. Begin speaking when you hear this sound."
@@ -317,14 +366,14 @@ const INSTRUCTION_PART3 =
 const PART_DEFAULTS: Record<PartDraft["type"], Partial<PartDraft>> = {
   part1: {
     title: "Part 1 \u2013 Short Questions",
-    prep_time: 10,
+    prep_time: 5,
     answer_time: 30,
     instruction: INSTRUCTION_PART1,
   },
   part1_photos: {
     title: "Part 1.2 \u2013 Photo Questions",
     prep_time: 10,
-    answer_time: 40,
+    answer_time: 45,
     instruction: "",
   },
   part2: {
@@ -352,7 +401,7 @@ function emptyPart(partNumber: number): PartDraft {
     part_number: partNumber,
     instruction: INSTRUCTION_PART1,
     images: [],
-    prep_time: 10,
+    prep_time: 5,
     answer_time: 30,
     questions: [emptyQuestion()],
   }
@@ -361,6 +410,7 @@ function emptyPart(partNumber: number): PartDraft {
 // ── Exam Form (full builder) ──
 
 function mapBackendToPartDrafts(detail: BackendExamDetail): PartDraft[] {
+  if (!detail || !detail.parts) return []
   return detail.parts.map((p) => ({
     type: p.type as PartDraft["type"],
     title: p.title,
@@ -431,7 +481,7 @@ function ExamForm({
         prep_time: p.prep_time,
         answer_time: p.answer_time,
         questions: p.questions
-          .filter((q) => q.text.trim())
+          .filter((q) => q.text.trim() || q.sub_questions.some((s) => s.trim()) || q.for_against_points.some((f) => f.point_text.trim()))
           .map((q) => ({
             text: q.text,
             sub_questions: q.sub_questions.filter((s) => s.trim()),
@@ -598,7 +648,7 @@ function ExamForm({
                 placeholder="B2 Speaking Exam"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Level</label>
                 <select
@@ -741,7 +791,7 @@ function ExamForm({
                 {/* Part body (expanded) */}
                 {isExpanded && (
                   <div className="border-t border-border px-5 py-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className={labelClass}>Part Type</label>
                         <select
@@ -803,20 +853,20 @@ function ExamForm({
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className={labelClass}>
                           Prep Time (seconds)
                         </label>
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           value={part.prep_time}
-                          onChange={(e) =>
-                            updatePart(pIdx, {
-                              prep_time: Number(e.target.value),
-                            })
-                          }
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9]/g, "")
+                            updatePart(pIdx, { prep_time: v === "" ? 0 : Number(v) })
+                          }}
                           className={inputClass}
                         />
                       </div>
@@ -825,14 +875,14 @@ function ExamForm({
                           Answer Time (seconds)
                         </label>
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           value={part.answer_time}
-                          onChange={(e) =>
-                            updatePart(pIdx, {
-                              answer_time: Number(e.target.value),
-                            })
-                          }
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9]/g, "")
+                            updatePart(pIdx, { answer_time: v === "" ? 0 : Number(v) })
+                          }}
                           className={inputClass}
                         />
                       </div>
@@ -921,7 +971,7 @@ function ExamForm({
                               </span>
                               <div className="flex-1">
                                 <label className={labelClass}>
-                                  Question Text
+                                  Question Text{part.type === "part2" ? " (optional)" : ""}
                                 </label>
                                 <textarea
                                   value={q.text}
@@ -935,9 +985,11 @@ function ExamForm({
                                   placeholder={
                                     part.type === "part1"
                                       ? "e.g. Where do you live?"
-                                      : part.type === "part1_photos" || part.type === "part2"
-                                        ? "e.g. Describe what you see in the picture."
-                                        : "e.g. Should school uniforms be mandatory?"
+                                      : part.type === "part2"
+                                        ? "Optional – leave empty if using sub-questions only"
+                                        : part.type === "part1_photos"
+                                          ? "e.g. Describe what you see in the picture."
+                                          : "e.g. Should school uniforms be mandatory?"
                                   }
                                 />
                               </div>

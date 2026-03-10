@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ExamCardItem } from "@/components/exam-card"
 import type { ExamCard, ExamResult } from "@/lib/api-types"
@@ -12,27 +11,6 @@ interface OverviewTabProps {
 export function OverviewTab({ examCards, latestResult }: OverviewTabProps) {
   return (
     <div className="space-y-8">
-      <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card px-6 py-5 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="mb-1 text-lg font-bold text-foreground">
-            Start a new speaking exam
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Choose any exam below. Your level will be calculated automatically
-            out of 75 after you finish.
-          </p>
-        </div>
-        <Link href="/exam">
-          <Button
-            className="gap-2 text-sm font-semibold text-white"
-            style={{ backgroundColor: "hsl(var(--exam-primary))" }}
-          >
-            Take exam
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </Link>
-      </section>
-
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground">Available exams</h2>

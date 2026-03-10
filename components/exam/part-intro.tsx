@@ -123,9 +123,20 @@ export function PartIntro({ partNumber, title, instruction, instructionAudio, au
   }
 
   return (
-    <div className="flex flex-col items-center gap-8 md:flex-row md:items-start md:gap-12">
-      <div className="flex-1 rounded-2xl border-2 p-6 md:p-8 transition-all duration-300 hover:shadow-lg" style={{ borderColor: "hsl(var(--exam-card-border))" }}>
-        <div className="mb-4 flex items-center gap-2">
+    <div className="flex flex-col items-center gap-6 md:gap-8">
+      {/* Part label */}
+      <div className="text-center">
+        <div
+          className="inline-flex items-center justify-center rounded-2xl px-8 py-4 text-xl font-bold text-white shadow-lg md:text-2xl"
+          style={{ backgroundColor: "hsl(var(--exam-primary))" }}
+        >
+          {partLabel}
+        </div>
+      </div>
+
+      {/* Instruction card */}
+      <div className="w-full rounded-2xl border border-border bg-card p-5 md:p-8 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
           {audioLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
@@ -145,23 +156,17 @@ export function PartIntro({ partNumber, title, instruction, instructionAudio, au
             </button>
           )}
         </div>
-        <p className="text-base leading-relaxed text-foreground md:text-lg">
+        <p className="text-sm leading-relaxed text-foreground md:text-base">
           {instruction}
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-6">
-        <div
-          className="flex items-center justify-center rounded-2xl px-10 py-5 text-2xl font-bold text-white shadow-lg transition-transform hover:scale-105 md:text-3xl"
-          style={{ backgroundColor: "hsl(var(--exam-primary))" }}
-        >
-          {partLabel}
-        </div>
-
+      {/* Countdown or start button */}
+      <div className="flex flex-col items-center gap-3">
         {countdown !== null ? (
           <div className="flex flex-col items-center gap-2">
             <div
-              className="flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold text-white animate-pulse"
+              className="flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold text-white animate-pulse shadow-lg"
               style={{ backgroundColor: "hsl(var(--exam-primary))" }}
             >
               {countdown}

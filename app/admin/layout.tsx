@@ -16,6 +16,8 @@ import {
   Moon,
   ChevronLeft,
   CreditCard,
+  Menu,
+  X,
 } from "lucide-react"
 
 const navItems = [
@@ -32,8 +34,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => setMounted(true), [])
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     if (isLoading) return
@@ -66,22 +74,64 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex min-h-screen bg-muted/30">
-      {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-background">
-        {/* Logo */}
-        <div className="flex h-16 items-center gap-3 border-b border-border px-5">
+      {/* Mobile header bar */}
+      <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-3 border-b border-border bg-background px-4 lg:hidden">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="flex items-center gap-2">
           <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-white"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-white"
             style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
           >
-            <Mic className="h-5 w-5" />
+            <Mic className="h-4 w-4" />
           </div>
-          <div>
-            <span className="text-sm font-bold text-foreground">SpeakExam</span>
-            <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-              Admin
-            </span>
+          <span className="text-sm font-bold text-foreground">SpeakExam</span>
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+            Admin
+          </span>
+        </div>
+      </div>
+
+      {/* Backdrop overlay (mobile) */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-background transition-transform duration-300 ease-in-out lg:z-40 lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Logo */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-5">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-white"
+              style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
+            >
+              <Mic className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-sm font-bold text-foreground">SpeakExam</span>
+              <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                Admin
+              </span>
+            </div>
           </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Nav */}
@@ -149,7 +199,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main content */}
-      <main className="ml-64 flex-1 p-6 lg:p-8">{children}</main>
+      <main className="w-full pt-14 lg:pt-0 lg:ml-64 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
     </div>
   )
 }

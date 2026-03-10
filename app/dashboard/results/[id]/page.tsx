@@ -120,7 +120,7 @@ export default function ResultDetailPage() {
             Exam & Recordings
           </h2>
           {hasParts ? (
-            <ResultRecordingsView parts={result.parts} recordings={result.recordings} showScores={graded} />
+            <ResultRecordingsView parts={result.parts!} recordings={result.recordings} showScores={graded} />
           ) : (
             <div className="space-y-4">
               {result.recordings.map((rec, idx) => (

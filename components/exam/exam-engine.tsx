@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import type { Exam, ExamPhase, RecordingSegment } from "@/lib/exam-types"
+import type { Exam, RecordingSegment } from "@/lib/exam-types"
+
+type ExamPhase = "intro" | "prep" | "answer" | "complete"
 import { useAudioRecorder } from "@/hooks/use-audio-recorder"
 import { ProgressStepper } from "./progress-stepper"
 import { CountdownTimer } from "./countdown-timer"
@@ -52,6 +54,39 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
   const currentPart = exam.parts[currentPartIndex]
   const currentQuestion = currentPart?.questions[currentQuestionIndex]
+
+  // Prevent page reload / tab close during active exam
+  useEffect(() => {
+    if (phase === "complete") return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [phase])
+
+  // Push a history entry so back button doesn't leave the exam
+  useEffect(() => {
+    if (phase === "complete") return
+    window.history.pushState(null, "", window.location.href)
+    const onPopState = () => {
+      window.history.pushState(null, "", window.location.href)
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [phase])
+
+  // Re-enter fullscreen if user exits it during the exam
+  useEffect(() => {
+    if (phase === "complete") return
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {})
+      }
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange)
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange)
+  }, [phase])
 
   // Start session on mount
   useEffect(() => {
@@ -202,29 +237,36 @@ export function ExamEngine({ exam }: ExamEngineProps) {
       setTimeRemaining(prepTime)
       setTimerKey((k) => k + 1)
     } else if (hasMoreParts) {
-      const completedPartName = currentPart.title.split(" - ")[0] || currentPart.title
-      playCompleteSound()
-      setTransitionPartName(completedPartName)
-      setShowTransition(true)
+      const nextIdx = currentPartIndex + 1
+      const nextPart = exam.parts[nextIdx]
+      const currentDisplay = getDisplayPart(currentPartIndex, exam)
+      const nextDisplay = getDisplayPart(nextIdx, exam)
 
-      setTimeout(() => {
-        setShowTransition(false)
-        const nextIdx = currentPartIndex + 1
-        const nextPart = exam.parts[nextIdx]
+      if (currentDisplay === nextDisplay) {
+        // Same display part (e.g. part1 → part1_photos) – skip transition
         setCurrentPartIndex(nextIdx)
         setCurrentQuestionIndex(0)
-
-        if (nextPart?.type === "part1_photos") {
-          setPhase("prep")
-          const prepTime = nextPart.prepTime
-          totalTimeRef.current = prepTime
-          setTimeRemaining(prepTime)
-          setTimerKey((k) => k + 1)
-        } else {
-          setPhase("intro")
-        }
+        setPhase("prep")
+        const prepTime = nextPart!.prepTime
+        totalTimeRef.current = prepTime
+        setTimeRemaining(prepTime)
+        setTimerKey((k) => k + 1)
         triggerAnimation()
-      }, 2500)
+      } else {
+        const displayPartNames = ["Part 1", "Part 2", "Part 3"]
+        const completedPartName = displayPartNames[currentDisplay] || currentPart.title
+        playCompleteSound()
+        setTransitionPartName(completedPartName)
+        setShowTransition(true)
+
+        setTimeout(() => {
+          setShowTransition(false)
+          setCurrentPartIndex(nextIdx)
+          setCurrentQuestionIndex(0)
+          setPhase("intro")
+          triggerAnimation()
+        }, 2500)
+      }
     } else {
       playCompleteSound()
       setPhase("complete")
@@ -279,11 +321,23 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
   const displayPart = getDisplayPart(currentPartIndex, exam)
   const completedDisplayParts = getCompletedDisplayParts(currentPartIndex, exam)
-  const questionNumber = currentQuestionIndex
+
+  const displayPartNames = ["Part 1", "Part 2", "Part 3"]
+  const currentDisplayLabel = displayPartNames[displayPart] || `Part ${displayPart + 1}`
 
   return (
-    <div className="mx-auto min-h-screen max-w-4xl px-4 py-6 md:py-10">
-      <div className="mb-8 animate-fade-in md:mb-12">
+    <div className="mx-auto flex min-h-screen flex-col max-w-4xl px-4 py-4 md:py-8 select-none">
+      {/* Top bar: exam title + stepper */}
+      <div className="mb-6 md:mb-10 space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-7 items-center rounded-full px-3 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: "hsl(var(--exam-primary))" }}>
+              {exam.isFree ? "Free" : "Mock"}
+            </span>
+            <span className="text-sm font-semibold text-foreground hidden sm:inline">{exam.title}</span>
+          </div>
+          <span className="text-xs font-semibold text-muted-foreground">{currentDisplayLabel}</span>
+        </div>
         <ProgressStepper
           totalParts={3}
           currentPart={displayPart}
@@ -292,72 +346,98 @@ export function ExamEngine({ exam }: ExamEngineProps) {
       </div>
 
       {recorderError && (
-        <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 animate-scale-in">
+        <div className="mb-5 flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 animate-scale-in">
           <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
           <p className="text-sm text-destructive">{recorderError}</p>
         </div>
       )}
 
-      {phase === "intro" && (
-        <div className={animateContent ? "animate-slide-up" : "opacity-0"}>
-          <PartIntro
-            partNumber={currentPart.partNumber}
-            title={currentPart.title}
-            instruction={currentPart.instruction}
-            instructionAudio={currentPart.instructionAudio}
-            autoStart={!exam.isFree}
-            onStart={handleStartPart}
-          />
-        </div>
-      )}
+      {/* Main content area — fills remaining space */}
+      <div className="flex-1 flex flex-col justify-center">
+        {phase === "intro" && (
+          <div className={animateContent ? "animate-slide-up" : "opacity-0"}>
+            <PartIntro
+              partNumber={displayPart + 1}
+              title={currentPart.title}
+              instruction={currentPart.instruction}
+              instructionAudio={currentPart.instructionAudio}
+              autoStart={!exam.isFree}
+              onStart={handleStartPart}
+            />
+          </div>
+        )}
 
-      {(phase === "prep" || phase === "answer") && (
-        <div className={`flex flex-col gap-6 md:flex-row md:gap-10 ${animateContent ? "animate-fade-in" : "opacity-0"}`}>
-          <div className="flex-1">
-            <div className="mb-4 flex items-center gap-3">
-              {phase === "prep" ? (
-                <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)" }}>
-                  <Clock className="h-4 w-4" style={{ color: "hsl(var(--exam-primary))" }} />
-                  <span className="text-sm font-semibold" style={{ color: "hsl(var(--exam-primary))" }}>
-                    Preparation Time
+        {(phase === "prep" || phase === "answer") && (
+          <div className={`flex flex-col gap-5 md:flex-row md:gap-10 ${animateContent ? "animate-fade-in" : "opacity-0"}`}>
+            {/* Timer – centered above content on mobile */}
+            <div className="flex flex-col items-center gap-2 md:hidden">
+              <CountdownTimer
+                key={timerKey}
+                timeRemaining={timeRemaining}
+                totalTime={totalTimeRef.current}
+                isRecording={phase === "answer"}
+                onComplete={handleTimerComplete}
+                onTick={handleTimerTick}
+              />
+              <div className="flex items-center gap-2">
+                {phase === "prep" ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold" style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)", color: "hsl(var(--exam-primary))" }}>
+                    <Clock className="h-3 w-3" />
+                    Preparation
                   </span>
-                </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold animate-ring-pulse" style={{ backgroundColor: "hsl(var(--exam-recording) / 0.1)", color: "hsl(var(--exam-recording))" }}>
+                    <Mic className="h-3 w-3" />
+                    Recording
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1">
+              <div className="mb-4 hidden md:flex items-center gap-3">
+                {phase === "prep" ? (
+                  <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: "hsl(var(--exam-primary) / 0.1)" }}>
+                    <Clock className="h-4 w-4" style={{ color: "hsl(var(--exam-primary))" }} />
+                    <span className="text-sm font-semibold" style={{ color: "hsl(var(--exam-primary))" }}>
+                      Preparation Time
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-full px-4 py-2 animate-ring-pulse" style={{ backgroundColor: "hsl(var(--exam-recording) / 0.1)" }}>
+                    <Mic className="h-4 w-4" style={{ color: "hsl(var(--exam-recording))" }} />
+                    <span className="text-sm font-bold" style={{ color: "hsl(var(--exam-recording))" }}>
+                      Speak Now
+                    </span>
+                    <Volume2 className="h-4 w-4 animate-pulse" style={{ color: "hsl(var(--exam-recording))" }} />
+                  </div>
+                )}
+              </div>
+
+              {currentPart.type === "part3" ? (
+                <ForAgainstCard question={currentQuestion} />
               ) : (
-                <div className="flex items-center gap-2 rounded-full px-4 py-2 animate-ring-pulse" style={{ backgroundColor: "hsl(var(--exam-recording) / 0.1)" }}>
-                  <Mic className="h-4 w-4" style={{ color: "hsl(var(--exam-recording))" }} />
-                  <span className="text-sm font-bold" style={{ color: "hsl(var(--exam-recording))" }}>
-                    Speak Now
-                  </span>
-                  <Volume2 className="h-4 w-4 animate-pulse" style={{ color: "hsl(var(--exam-recording))" }} />
-                </div>
+                <QuestionCard question={currentQuestion} partImages={currentPart.images} />
               )}
             </div>
 
-            {currentPart.type === "part3" ? (
-              <ForAgainstCard
-                question={currentQuestion}
-                questionNumber={currentQuestionIndex + 1}
+            {/* Timer – sidebar on desktop */}
+            <div className="hidden md:flex flex-col items-center gap-4">
+              <CountdownTimer
+                key={timerKey}
+                timeRemaining={timeRemaining}
+                totalTime={totalTimeRef.current}
+                isRecording={phase === "answer"}
+                onComplete={handleTimerComplete}
+                onTick={handleTimerTick}
               />
-            ) : (
-              <QuestionCard question={currentQuestion} questionNumber={questionNumber + 1} partImages={currentPart.images} />
-            )}
+              <span className="text-xs font-medium text-muted-foreground">
+                {phase === "prep" ? "Get Ready..." : "Speak clearly"}
+              </span>
+            </div>
           </div>
-
-          <div className="flex flex-col items-center gap-4">
-            <CountdownTimer
-              key={timerKey}
-              timeRemaining={timeRemaining}
-              totalTime={totalTimeRef.current}
-              isRecording={phase === "answer"}
-              onComplete={handleTimerComplete}
-              onTick={handleTimerTick}
-            />
-            <span className="text-xs font-medium text-muted-foreground">
-              {phase === "prep" ? "Get Ready..." : "Speak clearly"}
-            </span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

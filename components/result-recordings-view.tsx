@@ -42,11 +42,29 @@ interface PartWithRecordings {
   questions: QuestionWithRecording[]
 }
 
+interface AiRecordingScore {
+  score: number
+  feedback: string
+  transcription?: string
+  level_achieved?: string
+  fluency_metrics?: {
+    words_per_minute: number
+    pause_count: number
+    avg_pause_duration: number
+    long_pauses: number
+    filler_words: number
+    speaking_rate: string
+  }
+  criteria?: Record<string, number | undefined>
+  strengths?: string[]
+  improvements?: string[]
+}
+
 interface ResultRecordingsViewProps {
   parts: PartWithRecordings[]
   recordings?: { id: string; part_id: string; question_id: string; part_label: string; question_text: string; file_path: string | null; duration: number; score?: number | null; feedback?: string | null }[]
   showScores?: boolean
-  aiScores?: Record<string, { score: number; feedback: string }>
+  aiScores?: Record<string, AiRecordingScore>
 }
 
 export function ResultRecordingsView({ parts, recordings = [], showScores = false, aiScores = {} }: ResultRecordingsViewProps) {
@@ -104,7 +122,7 @@ export function ResultRecordingsView({ parts, recordings = [], showScores = fals
             <h4 className="mt-0.5 text-lg font-bold text-foreground">{part.part_title}</h4>
           </div>
           {part.part_type === "part1_photos" && part.part_images && part.part_images.length > 0 && (
-            <div className={`border-b border-border p-6 grid gap-4 ${part.part_images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div className={`border-b border-border p-6 grid gap-4 ${part.part_images.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
               {part.part_images.map((img, idx) => (
                 <div key={idx} className="overflow-hidden rounded-lg">
                   <img
@@ -143,7 +161,7 @@ export function ResultRecordingsView({ parts, recordings = [], showScores = fals
                   Question {q.question_order || qIdx + 1}
                 </p>
                 {!isPart1Photos && images.length > 0 && (
-                  <div className={`mb-4 grid gap-4 ${images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <div className={`mb-4 grid gap-4 ${images.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
                     {images.map((img, idx) => (
                       <div key={idx} className="overflow-hidden rounded-lg">
                         <img
@@ -175,8 +193,8 @@ export function ResultRecordingsView({ parts, recordings = [], showScores = fals
                 )}
                 {hasForAgainst && (
                   <div className="mb-4 overflow-hidden rounded-lg border border-border">
-                    <div className="grid grid-cols-2">
-                      <div className="border-r border-border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2">
+                      <div className="border-b sm:border-b-0 sm:border-r border-border p-4">
                         <h4 className="mb-3 text-sm font-bold text-primary">FOR</h4>
                         <ul className="space-y-2">
                           {forPoints.map((point, idx) => (

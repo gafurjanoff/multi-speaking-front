@@ -87,18 +87,39 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 10px 20px;
   border: 1px solid var(--cert-border);
   background: var(--cert-surface);
   border-radius: 100px;
   font-family: "DM Sans", sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--cert-muted);
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.download-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.download-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--cert-border);
+  border-top-color: var(--cert-accent);
+  border-radius: 50%;
+  animation: cert-spin 0.6s linear infinite;
+}
+
+@keyframes cert-spin {
+  to { transform: rotate(360deg); }
 }
 
 .download-btn:hover {
@@ -356,8 +377,12 @@
 }
 
 @media (max-width: 600px) {
+  .cert-root {
+    padding: 24px 8px;
+  }
+
   .cert-inner {
-    padding: 32px 24px;
+    padding: 24px 16px;
   }
 
   .cert-header {
@@ -368,12 +393,48 @@
     text-align: left;
   }
 
+  .cert-score-num {
+    font-size: 40px;
+  }
+
   .bands-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .cert-awardee-name {
-    font-size: 28px;
+    font-size: 24px;
+  }
+
+  .cert-exam-name {
+    font-size: 14px;
+  }
+
+  .cert-watermark {
+    font-size: 9px;
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .top-bar {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    margin-bottom: 20px;
+  }
+
+  .download-btn {
+    justify-content: center;
+    padding: 12px 24px;
+    font-size: 13px;
+  }
+
+  .back-link {
+    font-size: 12px;
+  }
+
+  .feedback-block {
+    padding: 16px 16px 16px 20px;
   }
 }
 

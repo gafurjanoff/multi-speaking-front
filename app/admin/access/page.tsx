@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import {
   adminFetchAccess,
   adminGrantAccess,
@@ -11,7 +11,22 @@ import {
   type AdminUser,
 } from "@/lib/api-services"
 import type { ExamCard } from "@/lib/api-types"
-import { Shield, Trash2, Plus, Search, UserCheck, X, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
+import {
+  Shield,
+  Trash2,
+  Plus,
+  Search,
+  UserCheck,
+  X,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Users,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  UserPlus,
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -44,58 +59,104 @@ function Toast({ message, type, onClose }: { message: string; type: ToastType; o
   )
 }
 
+interface ExamWithStudents {
+  exam: ExamCard
+  students: ExamAccessRecord[]
+}
+
 export default function AdminAccessPage() {
   const [records, setRecords] = useState<ExamAccessRecord[]>([])
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([])
+  const [paidExams, setPaidExams] = useState<ExamCard[]>([])
   const [loading, setLoading] = useState(true)
-  const [showGrant, setShowGrant] = useState(false)
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [exams, setExams] = useState<ExamCard[]>([])
-  const [selectedUser, setSelectedUser] = useState("")
-  const [selectedExam, setSelectedExam] = useState("")
-  const [granting, setGranting] = useState(false)
   const [search, setSearch] = useState("")
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
+
+  // Per-exam add student state
+  const [addingToExam, setAddingToExam] = useState<string | null>(null)
+  const [userSearch, setUserSearch] = useState("")
+  const [granting, setGranting] = useState(false)
+
+  // Expand/collapse state per exam card
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
+  // Confirm dialogs
   const [revokeConfirm, setRevokeConfirm] = useState<{ id: string; user_name: string; exam_title: string } | null>(null)
-  const [grantConfirm, setGrantConfirm] = useState(false)
+  const [grantConfirm, setGrantConfirm] = useState<{ user: AdminUser; examId: string; examTitle: string } | null>(null)
 
   const showToast = useCallback((message: string, type: ToastType) => {
     setToast({ message, type })
   }, [])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
-    const data = await adminFetchAccess()
-    setRecords(data)
+    const [accessData, usersData, examsData] = await Promise.all([
+      adminFetchAccess(),
+      adminFetchUsers(),
+      adminFetchExams(),
+    ])
+    setRecords(accessData)
+    setAllUsers(usersData)
+    setPaidExams(examsData.filter((e) => !e.isFree))
     setLoading(false)
-  }
+  }, [])
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [loadData])
 
-  const openGrantModal = async () => {
-    setShowGrant(true)
-    const [u, e] = await Promise.all([adminFetchUsers(), adminFetchExams()])
-    setUsers(u)
-    setExams(e.filter((ex) => !ex.isFree))
-  }
+  // Group access records by exam
+  const examGroups: ExamWithStudents[] = useMemo(() => {
+    const q = search.toLowerCase()
+    return paidExams
+      .map((exam) => ({
+        exam,
+        students: records.filter((r) => r.exam_id === exam.id),
+      }))
+      .filter((group) => {
+        if (!q) return true
+        // Search in exam title, or any student name/phone in this exam
+        if (group.exam.title.toLowerCase().includes(q)) return true
+        return group.students.some(
+          (s) =>
+            s.user_name.toLowerCase().includes(q) ||
+            s.user_phone.includes(q)
+        )
+      })
+  }, [paidExams, records, search])
 
-  const handleGrantClick = () => {
-    if (!selectedUser || !selectedExam) return
-    setGrantConfirm(true)
+  // Users not yet enrolled in a specific exam
+  const availableUsersForExam = useCallback(
+    (examId: string) => {
+      const enrolledUserIds = new Set(
+        records.filter((r) => r.exam_id === examId).map((r) => r.user_id)
+      )
+      const q = userSearch.toLowerCase()
+      return allUsers.filter((u) => {
+        if (enrolledUserIds.has(u.id)) return false
+        if (!q) return true
+        const name = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase()
+        return name.includes(q) || u.phone_number.includes(q)
+      })
+    },
+    [allUsers, records, userSearch]
+  )
+
+  const handleGrant = async (user: AdminUser, examId: string, examTitle: string) => {
+    setGrantConfirm({ user, examId, examTitle })
   }
 
   const handleGrantConfirm = async () => {
-    if (!selectedUser || !selectedExam) return
-    setGrantConfirm(false)
+    if (!grantConfirm) return
+    const { user, examId } = grantConfirm
+    setGrantConfirm(null)
     setGranting(true)
-    const ok = await adminGrantAccess(selectedUser, selectedExam)
+    const ok = await adminGrantAccess(user.id, examId)
     if (ok) {
-      showToast("Access granted!", "success")
-      setShowGrant(false)
-      setSelectedUser("")
-      setSelectedExam("")
+      showToast(`Access granted to ${user.first_name || user.phone_number}`, "success")
+      setAddingToExam(null)
+      setUserSearch("")
       await loadData()
     } else {
-      showToast("Failed to grant access. Already granted?", "error")
+      showToast("Failed to grant access", "error")
     }
     setGranting(false)
   }
@@ -117,36 +178,32 @@ export default function AdminAccessPage() {
     }
   }
 
-  const filtered = records.filter((r) => {
-    const q = search.toLowerCase()
-    return r.user_name.toLowerCase().includes(q) || r.user_phone.includes(q) || r.exam_title.toLowerCase().includes(q)
-  })
+  const toggleCollapse = (examId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(examId)) next.delete(examId)
+      else next.add(examId)
+      return next
+    })
+  }
 
   return (
     <div>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Exam Access</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Approve users for paid exams after payment</p>
-        </div>
-        <button
-          onClick={openGrantModal}
-          className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90"
-          style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
-        >
-          <Plus className="h-4 w-4" />
-          Grant Access
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-foreground">Exam Access</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage which students can take each paid exam
+        </p>
       </div>
 
-      <div className="mb-4 relative">
+      <div className="mb-5 relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, phone, or exam..."
+          placeholder="Search exams or students..."
           className="w-full rounded-xl border border-border bg-card pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
@@ -155,46 +212,166 @@ export default function AdminAccessPage() {
         <div className="flex items-center justify-center py-20">
           <div className="h-7 w-7 animate-spin rounded-full border-4 border-muted border-t-primary" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : examGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
-          <UserCheck className="mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">No access records yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">Grant access after receiving payment</p>
+          <BookOpen className="mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">No paid exams found</p>
+          <p className="mt-1 text-xs text-muted-foreground">Create a paid exam first, then grant student access here</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="grid grid-cols-[1fr_1fr_1fr_100px_80px] items-center gap-3 border-b border-border bg-muted/50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Student</span>
-            <span>Phone</span>
-            <span>Exam</span>
-            <span className="text-center">Status</span>
-            <span className="text-right">Action</span>
-          </div>
-          {filtered.map((r) => (
-            <div key={r.id} className="grid grid-cols-[1fr_1fr_1fr_100px_80px] items-center gap-3 border-t border-border px-5 py-3.5 transition-colors hover:bg-muted/30">
-              <p className="truncate text-sm font-medium text-foreground">{r.user_name || "No name"}</p>
-              <p className="truncate text-sm text-muted-foreground">{r.user_phone}</p>
-              <p className="truncate text-sm text-muted-foreground">{r.exam_title}</p>
-              <span className="flex justify-center">
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  <Shield className="h-3 w-3" />
-                  {r.status}
-                </span>
-              </span>
-              <span className="text-right">
-                <button
-                  onClick={() => handleRevokeClick(r)}
-                  className="rounded-lg p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+        <div className="space-y-4">
+          {examGroups.map(({ exam, students }) => {
+            const isCollapsed = collapsed.has(exam.id)
+            const isAdding = addingToExam === exam.id
+
+            return (
+              <div key={exam.id} className="rounded-2xl border border-border bg-card overflow-hidden">
+                {/* Exam header */}
+                <div
+                  className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => toggleCollapse(exam.id)}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </span>
-            </div>
-          ))}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-foreground truncate">{exam.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {exam.level} • {students.length} {students.length === 1 ? "student" : "students"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isAdding) {
+                          setAddingToExam(null)
+                          setUserSearch("")
+                        } else {
+                          setAddingToExam(exam.id)
+                          setUserSearch("")
+                          // Auto-expand when adding
+                          setCollapsed((prev) => {
+                            const next = new Set(prev)
+                            next.delete(exam.id)
+                            return next
+                          })
+                        }
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-all hover:opacity-90"
+                      style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Add Student</span>
+                    </button>
+                    {isCollapsed ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Add student inline panel */}
+                {isAdding && !isCollapsed && (
+                  <div className="border-t border-border bg-muted/30 px-5 py-3">
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Search by name or phone..."
+                        autoFocus
+                        className="w-full rounded-lg border border-border bg-background pl-9 pr-8 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      <button
+                        onClick={() => { setAddingToExam(null); setUserSearch("") }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-muted"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {availableUsersForExam(exam.id).length === 0 ? (
+                        <p className="py-3 text-center text-xs text-muted-foreground">
+                          {userSearch ? "No matching users found" : "All users already have access"}
+                        </p>
+                      ) : (
+                        availableUsersForExam(exam.id).slice(0, 20).map((u) => {
+                          const name = [u.first_name, u.last_name].filter(Boolean).join(" ")
+                          return (
+                            <button
+                              key={u.id}
+                              disabled={granting}
+                              onClick={() => handleGrant(u, exam.id, exam.title)}
+                              className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-background disabled:opacity-50"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {name || "No name"}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">{u.phone_number}</p>
+                              </div>
+                              <Plus className="h-4 w-4 shrink-0 text-primary" />
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Student list */}
+                {!isCollapsed && (
+                  <div className="border-t border-border">
+                    {students.length === 0 ? (
+                      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                        <Users className="h-4 w-4" />
+                        <span className="text-sm">No students enrolled yet</span>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {students.map((s) => (
+                          <div key={s.id} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-muted/20 transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary uppercase">
+                                {(s.user_name || "?")[0]}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {s.user_name || "No name"}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">{s.user_phone}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                <Shield className="h-3 w-3" />
+                                approved
+                              </span>
+                              <button
+                                onClick={() => handleRevokeClick(s)}
+                                className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                                title="Revoke access"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Revoke confirmation modal */}
+      {/* Revoke confirmation */}
       <Dialog open={!!revokeConfirm} onOpenChange={(open) => !open && setRevokeConfirm(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -204,7 +381,7 @@ export default function AdminAccessPage() {
             </DialogTitle>
             <DialogDescription>
               {revokeConfirm && (
-                <>This will revoke <strong>{revokeConfirm.user_name}</strong>&apos;s access to <strong>{revokeConfirm.exam_title}</strong>. They will no longer be able to take this exam until you grant access again.</>
+                <>This will revoke <strong>{revokeConfirm.user_name}</strong>&apos;s access to <strong>{revokeConfirm.exam_title}</strong>. They will no longer be able to take this exam.</>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -225,23 +402,23 @@ export default function AdminAccessPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Grant confirmation modal */}
-      <Dialog open={grantConfirm} onOpenChange={setGrantConfirm}>
+      {/* Grant confirmation */}
+      <Dialog open={!!grantConfirm} onOpenChange={(open) => !open && setGrantConfirm(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600 dark:text-green-400">
               <CheckCircle2 className="h-5 w-5" />
-              Confirm grant access
+              Grant access?
             </DialogTitle>
             <DialogDescription>
-              {selectedUser && selectedExam && (
-                <>Grant <strong>{users.find((u) => u.id === selectedUser)?.first_name || users.find((u) => u.id === selectedUser)?.phone_number || "this user"}</strong> access to <strong>{exams.find((e) => e.id === selectedExam)?.title}</strong>?</>
+              {grantConfirm && (
+                <>Grant <strong>{grantConfirm.user.first_name || grantConfirm.user.phone_number}</strong> access to <strong>{grantConfirm.examTitle}</strong>?</>
               )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <button
-              onClick={() => setGrantConfirm(false)}
+              onClick={() => setGrantConfirm(null)}
               className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
             >
               Cancel
@@ -256,67 +433,6 @@ export default function AdminAccessPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Grant Access Modal */}
-      {showGrant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-foreground">Grant Exam Access</h2>
-              <button onClick={() => setShowGrant(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select User</label>
-                <select
-                  value={selectedUser}
-                  onChange={(e) => setSelectedUser(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">-- Choose a user --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {[u.first_name, u.last_name].filter(Boolean).join(" ") || u.phone_number} ({u.phone_number})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Paid Exam</label>
-                <select
-                  value={selectedExam}
-                  onChange={(e) => setSelectedExam(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">-- Choose an exam --</option>
-                  {exams.map((e) => (
-                    <option key={e.id} value={e.id}>{e.title} ({e.level})</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={handleGrantClick}
-                disabled={!selectedUser || !selectedExam || granting}
-                className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
-              >
-                {granting ? "Granting..." : "Grant Access"}
-              </button>
-              <button
-                onClick={() => setShowGrant(false)}
-                className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

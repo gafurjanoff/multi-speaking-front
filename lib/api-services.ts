@@ -365,6 +365,8 @@ export interface AdminResult {
   session_id: string
   exam_id: string
   exam_title?: string
+  student_name?: string
+  student_phone?: string
   user_id: string
   status: string
   overall_score: number | null
@@ -444,11 +446,55 @@ export async function adminGradeResult(
   return res.ok
 }
 
+export interface AiRecordingScore {
+  recording_id: string
+  score: number | null
+  feedback: string
+  transcription?: string
+  fluency_metrics?: {
+    words_per_minute: number
+    pause_count: number
+    avg_pause_duration: number
+    long_pauses: number
+    filler_words: number
+    speaking_rate: string
+  }
+  criteria?: {
+    grammar?: number
+    vocabulary?: number
+    pronunciation?: number
+    fluency?: number
+    coherence?: number
+    task_response?: number
+    interaction?: number
+    overall_impression?: number
+  }
+  level_achieved?: string
+  strengths?: string[]
+  improvements?: string[]
+}
+
+export interface AiAssessmentCost {
+  whisper_minutes: number
+  gpt_input_tokens: number
+  gpt_output_tokens: number
+  whisper_cost: number
+  gpt_input_cost: number
+  gpt_output_cost: number
+  total_cost: number
+}
+
 export interface AiAssessResponse {
   error?: string
-  recording_scores: { recording_id: string; score: number | null; feedback: string }[]
+  recording_scores: AiRecordingScore[]
   criteria_total?: number
+  max_criteria?: number
   conversion_score?: number
+  max_conversion?: number
+  overall_level?: string
+  general_feedback?: string
+  cost?: AiAssessmentCost
+  model?: string
 }
 
 export async function adminAiAssess(resultId: string): Promise<AiAssessResponse | null> {
