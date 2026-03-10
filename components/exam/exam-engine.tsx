@@ -51,6 +51,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const totalTimeRef = useRef(0)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const isProcessingRef = useRef(false)
 
   const currentPart = exam.parts[currentPartIndex]
   const currentQuestion = currentPart?.questions[currentQuestionIndex]
@@ -207,7 +208,14 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   }, [currentPart, startRecording, playStartBeep, triggerAnimation])
 
   const handleAnswerComplete = useCallback(async () => {
-    if (!currentPart || !currentQuestion) return
+    // Prevent double execution from React StrictMode or timer race conditions
+    if (isProcessingRef.current) return
+    isProcessingRef.current = true
+
+    if (!currentPart || !currentQuestion) {
+      isProcessingRef.current = false
+      return
+    }
 
     const blob = await stopRecording()
 
@@ -230,12 +238,13 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
     if (hasMoreQuestions) {
       triggerAnimation()
-      setCurrentQuestionIndex((i) => i + 1)
+      setCurrentQuestionIndex(currentQuestionIndex + 1)
       setPhase("prep")
       const prepTime = currentPart.prepTime
       totalTimeRef.current = prepTime
       setTimeRemaining(prepTime)
       setTimerKey((k) => k + 1)
+      isProcessingRef.current = false
     } else if (hasMoreParts) {
       const nextIdx = currentPartIndex + 1
       const nextPart = exam.parts[nextIdx]
@@ -252,6 +261,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         setTimeRemaining(prepTime)
         setTimerKey((k) => k + 1)
         triggerAnimation()
+        isProcessingRef.current = false
       } else {
         const displayPartNames = ["Part 1", "Part 2", "Part 3"]
         const completedPartName = displayPartNames[currentDisplay] || currentPart.title
@@ -265,11 +275,13 @@ export function ExamEngine({ exam }: ExamEngineProps) {
           setCurrentQuestionIndex(0)
           setPhase("intro")
           triggerAnimation()
+          isProcessingRef.current = false
         }, 2500)
       }
     } else {
       playCompleteSound()
       setPhase("complete")
+      isProcessingRef.current = false
     }
   }, [
     currentPart,
