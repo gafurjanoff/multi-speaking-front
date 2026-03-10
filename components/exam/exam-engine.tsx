@@ -317,7 +317,15 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     return <ExamComplete recordings={recordings} exam={exam} sessionId={sessionId} />
   }
 
-  if (!currentPart || !currentQuestion) return null
+  // Debug logging
+  console.log(`[ExamEngine] partIndex=${currentPartIndex}, questionIndex=${currentQuestionIndex}, phase=${phase}`)
+  console.log(`[ExamEngine] totalParts=${exam.parts.length}, currentPart=${currentPart?.type}, currentQuestion=${currentQuestion?.text?.slice(0, 30)}`)
+
+  if (!currentPart || !currentQuestion) {
+    console.error(`[ExamEngine] BLANK SCREEN: currentPart=${!!currentPart}, currentQuestion=${!!currentQuestion}`)
+    console.error(`[ExamEngine] exam.parts=`, exam.parts.map(p => p.type))
+    return null
+  }
 
   const displayPart = getDisplayPart(currentPartIndex, exam)
   const completedDisplayParts = getCompletedDisplayParts(currentPartIndex, exam)
