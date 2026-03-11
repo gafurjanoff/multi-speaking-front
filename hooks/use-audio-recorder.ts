@@ -129,8 +129,11 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       }
 
       mediaRecorderRef.current = mediaRecorder
-      // Request data every 1 second to avoid losing data
-      mediaRecorder.start(1000)
+      // No timeslice → ondataavailable fires once on stop() with
+      // one complete self-contained WebM/Ogg/MP4 blob.
+      // This guarantees a valid container header in every recording.
+      mediaRecorder.start()
+      console.log("[AudioRecorder] Started (no timeslice — single complete blob)")
       setIsRecording(true)
     } catch (err: unknown) {
       console.error("[AudioRecorder] getUserMedia error:", err)
