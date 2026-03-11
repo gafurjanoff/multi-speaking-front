@@ -60,15 +60,16 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
       }
 
       const totalDuration = recordings.reduce((s, r) => s + r.duration, 0)
+      let submitOk = false
       try {
-        await submitSession(sessionId!, totalDuration)
-        console.log("Session submitted successfully")
+        submitOk = await submitSession(sessionId!, totalDuration)
       } catch (e) {
         console.error("Submit session failed:", e)
-        setUploadError("Failed to submit exam. Please contact support.")
       }
 
-      if (successCount < recordings.length && recordings.length > 0) {
+      if (!submitOk) {
+        setUploadError(prev => prev || "Failed to submit exam. Please contact support.")
+      } else if (successCount < recordings.length && recordings.length > 0) {
         setUploadError(`Uploaded ${successCount}/${recordings.length} recordings. Some may have failed.`)
       }
       setUploading(false)
@@ -216,7 +217,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
           Download All
         </Button>
         <Link href="/dashboard">
-          <Button size="lg" variant="outline" className="gap-2 rounded-xl">
+          <Button size="lg" variant="outline" className="gap-2 rounded-xl" disabled={uploading}>
             <Home className="h-4 w-4" />
             Dashboard
           </Button>

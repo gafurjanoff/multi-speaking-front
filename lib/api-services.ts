@@ -131,7 +131,11 @@ export async function submitSession(
     method: "POST",
     body: JSON.stringify({ total_duration: totalDuration }),
   })
-  return res.ok
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Submit failed: ${res.status} ${text}`)
+  }
+  return true
 }
 
 export async function uploadRecording(
