@@ -1,5 +1,7 @@
 "use client"
 
+import { getRecordingUrl } from "@/lib/recording-url"
+
 function feedbackDisplay(fb: string | null | undefined): string | null {
   if (!fb) return null
   try {
@@ -10,13 +12,9 @@ function feedbackDisplay(fb: string | null | undefined): string | null {
 }
 
 function recordingSrc(filePath: string | null): string {
-  if (!filePath) return ""
-  if (filePath.startsWith("http://") || filePath.startsWith("https://")) return filePath
-  if (filePath.startsWith("/uploads/")) return filePath
-  const idx = filePath.indexOf("uploads")
-  if (idx >= 0) return "/" + filePath.slice(idx).replace(/\\/g, "/")
-  const filename = filePath.split(/[/\\]/).pop()
-  return filename ? `/uploads/recordings/${filename}` : ""
+  // Delegate to the shared helper so that `/api/.../stream` URLs from the
+  // backend are used directly and legacy `/uploads/...` paths still work.
+  return getRecordingUrl(filePath)
 }
 
 interface QuestionWithRecording {
