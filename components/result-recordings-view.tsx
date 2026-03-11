@@ -42,7 +42,7 @@ interface PartWithRecordings {
 
 // Matches the backend response shape — criteria are top-level string fields,
 // transcript is "transcript" (not "transcription"), score is always a number.
-interface AiRecordingScore {
+export interface AiRecordingScore {
   score: number
   feedback?: string
   error?: boolean
@@ -94,6 +94,7 @@ export function ResultRecordingsView({
     string,
     { file_path: string | null; duration: number; score?: number | null; feedback?: string | null }
   >()
+  const recIdByPartQuestion = new Map<string, string>()
   const recsByPartOrder: typeof recordings[] = []
   let prevPartId: string | null = null
 
@@ -106,6 +107,7 @@ export function ResultRecordingsView({
       score: ai?.score ?? r.score,
       feedback: feedbackDisplay(ai?.feedback ?? r.feedback) ?? ai?.feedback ?? r.feedback ?? undefined,
     })
+    recIdByPartQuestion.set(key, r.id)
     const pid = String(r.part_id).trim().toLowerCase()
     if (pid !== prevPartId) {
       recsByPartOrder.push([])
@@ -207,6 +209,16 @@ export function ResultRecordingsView({
                 }
               }
 
+              // Find recording ID for AI data lookup
+              const pqKey = `${String(part.part_id).trim().toLowerCase()}:${String(q.question_id).trim().toLowerCase()}`
+              let recId = recIdByPartQuestion.get(pqKey)
+              if (!recId && partIdx < recsByPartOrder.length) {
+                const partRecs = recsByPartOrder[partIdx]
+                if (partRecs && qIdx < partRecs.length) recId = partRecs[qIdx].id
+              }
+              if (!recId && q.recording_id) recId = q.recording_id
+              const aiData = recId ? aiScores[recId] : undefined
+
               const filePath = q.file_path ?? fallbackRec?.file_path ?? null
               const duration = q.duration || fallbackRec?.duration || 0
               const fallbackScore = fallbackRec?.score ?? q.score
@@ -216,7 +228,7 @@ export function ResultRecordingsView({
                 q.feedback
 
               return (
-                <div key={q.question_id} className="p-6">
+                <div key={q.question_id} className="p-4 sm:p-6">
                   <p className="text-xs font-medium text-muted-foreground mb-1">
                     Question {q.question_order || qIdx + 1}
                   </p>
@@ -311,6 +323,100 @@ export function ResultRecordingsView({
                       )}
                       {fallbackFeedback && (
                         <span className="text-muted-foreground ml-2">— {fallbackFeedback}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {showScores && aiData && (aiData.transcript || aiData.grammar) && (
+                    <div className="mt-4 rounded-xl border border-border bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 p-3 sm:p-5 space-y-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base">🤖</span>
+                        <h5 className="text-sm font-bold text-foreground">AI Analysis</h5>
+                        {aiData.level_achieved && (
+                          <span className="ml-auto rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary">
+                            {aiData.level_achieved}
+                          </span>
+                        )}
+                      </div>
+
+                      {aiData.transcript && (
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Transcript</p>
+                          <p className="text-sm text-foreground leading-relaxed bg-white/60 dark:bg-white/5 rounded-lg p-2.5 sm:p-3 italic break-words">
+                            &ldquo;{aiData.transcript}&rdquo;
+                          </p>
+                        </div>
+                      )}
+
+                      {(aiData.grammar || aiData.vocabulary || aiData.pronunciation || aiData.fluency || aiData.coherence) && (
+                        <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2">
+                          {([{ label: "Grammar", value: aiData.grammar },
+                            { label: "Vocabulary", value: aiData.vocabulary },
+                            { label: "Pronunciation", value: aiData.pronunciation },
+                            { label: "Fluency", value: aiData.fluency },
+                            { label: "Coherence", value: aiData.coherence },
+                          ] as { label: string; value?: string }[]).filter(c => c.value).map(c => (
+                            <div key={c.label} className="rounded-lg bg-white/60 dark:bg-white/5 p-2.5 sm:p-3">
+                              <p className="text-xs font-bold text-muted-foreground mb-1">{c.label}</p>
+                              <p className="text-sm text-foreground leading-relaxed break-words">{c.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {aiData.fluency_metrics && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fluency Metrics</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-lg bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground">
+                              {aiData.fluency_metrics.words_per_minute} WPM
+                            </span>
+                            <span className="rounded-lg bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground">
+                              {aiData.fluency_metrics.total_words} words
+                            </span>
+                            <span className="rounded-lg bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground">
+                              {aiData.fluency_metrics.pause_count} pauses
+                            </span>
+                            <span className="rounded-lg bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground">
+                              {aiData.fluency_metrics.filler_words} fillers
+                            </span>
+                            <span className="rounded-lg bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground">
+                              {aiData.fluency_metrics.speaking_rate}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {aiData.strengths && aiData.strengths.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-green-600 dark:text-green-400 mb-2">
+                            ✅ Strengths
+                          </p>
+                          <ul className="space-y-1">
+                            {aiData.strengths.map((s, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {aiData.improvements && aiData.improvements.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-2">
+                            📈 Areas for Improvement
+                          </p>
+                          <ul className="space-y-1">
+                            {aiData.improvements.map((s, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </div>
                   )}

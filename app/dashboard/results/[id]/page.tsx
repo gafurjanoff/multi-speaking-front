@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { AppHeader } from "@/components/app-header"
 import { fetchResultDetail, type CandidateResultDetail } from "@/lib/api-services"
-import { ResultRecordingsView } from "@/components/result-recordings-view"
+import { ResultRecordingsView, type AiRecordingScore } from "@/components/result-recordings-view"
 import { getRecordingUrl } from "@/lib/recording-url"
 import { ArrowLeft, FileAudio, Award } from "lucide-react"
 
@@ -29,6 +29,62 @@ export default function ResultDetailPage() {
       setLoading(false)
     })
   }, [user, isLoading, router, resultId])
+
+  // Parse AI assessment data from stored JSON feedback (no cost/token data)
+  const aiScores = useMemo(() => {
+    if (!result || result.status !== "graded") return {}
+    const map: Record<string, AiRecordingScore> = {}
+
+    for (const part of result.parts ?? []) {
+      for (const q of part.questions ?? []) {
+        if (!q.recording_id || !q.feedback) continue
+        try {
+          const p = JSON.parse(q.feedback)
+          if (p && typeof p === "object" && "transcript" in p) {
+            map[q.recording_id] = {
+              score: q.score ?? 0,
+              feedback: p.feedback,
+              transcript: p.transcript,
+              fluency_metrics: p.fluency_metrics,
+              grammar: p.grammar,
+              vocabulary: p.vocabulary,
+              pronunciation: p.pronunciation,
+              fluency: p.fluency,
+              coherence: p.coherence,
+              level_achieved: p.level_achieved,
+              strengths: p.strengths,
+              improvements: p.improvements,
+            }
+          }
+        } catch {}
+      }
+    }
+
+    for (const rec of result.recordings ?? []) {
+      if (!rec.id || !rec.feedback || map[rec.id]) continue
+      try {
+        const p = JSON.parse(rec.feedback)
+        if (p && typeof p === "object" && "transcript" in p) {
+          map[rec.id] = {
+            score: rec.score ?? 0,
+            feedback: p.feedback,
+            transcript: p.transcript,
+            fluency_metrics: p.fluency_metrics,
+            grammar: p.grammar,
+            vocabulary: p.vocabulary,
+            pronunciation: p.pronunciation,
+            fluency: p.fluency,
+            coherence: p.coherence,
+            level_achieved: p.level_achieved,
+            strengths: p.strengths,
+            improvements: p.improvements,
+          }
+        }
+      } catch {}
+    }
+
+    return map
+  }, [result])
 
   if (isLoading || loading) {
     return (
@@ -120,7 +176,7 @@ export default function ResultDetailPage() {
             Exam & Recordings
           </h2>
           {hasParts ? (
-            <ResultRecordingsView parts={result.parts!} recordings={result.recordings} showScores={graded} />
+            <ResultRecordingsView parts={result.parts!} recordings={result.recordings} showScores={graded} aiScores={aiScores} />
           ) : (
             <div className="space-y-4">
               {result.recordings.map((rec, idx) => (

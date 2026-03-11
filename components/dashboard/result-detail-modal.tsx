@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from "lucide-react"
 import type { CandidateResultDetail } from "@/lib/api-services"
-import { ResultRecordingsView } from "@/components/result-recordings-view"
+import { ResultRecordingsView, type AiRecordingScore } from "@/components/result-recordings-view"
 
 interface ResultDetailModalProps {
   result: CandidateResultDetail
@@ -11,6 +11,62 @@ interface ResultDetailModalProps {
 
 export function ResultDetailModal({ result, onClose }: ResultDetailModalProps) {
   const hasParts = result.parts && result.parts.length > 0
+
+  // Parse AI assessment data from stored JSON feedback (no cost/token data)
+  const aiScores = (() => {
+    if (result.status !== "graded") return {}
+    const map: Record<string, AiRecordingScore> = {}
+
+    for (const part of result.parts ?? []) {
+      for (const q of part.questions ?? []) {
+        if (!q.recording_id || !q.feedback) continue
+        try {
+          const p = JSON.parse(q.feedback)
+          if (p && typeof p === "object" && "transcript" in p) {
+            map[q.recording_id] = {
+              score: q.score ?? 0,
+              feedback: p.feedback,
+              transcript: p.transcript,
+              fluency_metrics: p.fluency_metrics,
+              grammar: p.grammar,
+              vocabulary: p.vocabulary,
+              pronunciation: p.pronunciation,
+              fluency: p.fluency,
+              coherence: p.coherence,
+              level_achieved: p.level_achieved,
+              strengths: p.strengths,
+              improvements: p.improvements,
+            }
+          }
+        } catch {}
+      }
+    }
+
+    for (const rec of result.recordings ?? []) {
+      if (!rec.id || !rec.feedback || map[rec.id]) continue
+      try {
+        const p = JSON.parse(rec.feedback)
+        if (p && typeof p === "object" && "transcript" in p) {
+          map[rec.id] = {
+            score: rec.score ?? 0,
+            feedback: p.feedback,
+            transcript: p.transcript,
+            fluency_metrics: p.fluency_metrics,
+            grammar: p.grammar,
+            vocabulary: p.vocabulary,
+            pronunciation: p.pronunciation,
+            fluency: p.fluency,
+            coherence: p.coherence,
+            level_achieved: p.level_achieved,
+            strengths: p.strengths,
+            improvements: p.improvements,
+          }
+        }
+      } catch {}
+    }
+
+    return map
+  })()
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
@@ -31,7 +87,7 @@ export function ResultDetailModal({ result, onClose }: ResultDetailModalProps) {
             Your exam with all parts, questions, and your recordings.
           </p>
           {hasParts ? (
-            <ResultRecordingsView parts={result.parts} showScores={true} />
+            <ResultRecordingsView parts={result.parts!} recordings={result.recordings} showScores={true} aiScores={aiScores} />
           ) : (
             <div className="space-y-4">
               {result.recordings.map((rec, idx) => (

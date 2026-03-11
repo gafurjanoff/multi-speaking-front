@@ -38,6 +38,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
       setUploadError("")
 
       // Even if no recordings, we should still submit the session
+      const failedIndices: number[] = []
       let successCount = 0
       for (let i = 0; i < recordings.length; i++) {
         const rec = recordings[i]
@@ -51,12 +52,43 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
             rec.blob,
             rec.duration
           )
-          if (ok) successCount++
+          if (ok) {
+            successCount++
+          } else {
+            failedIndices.push(i + 1)
+          }
         } catch (e) {
-          console.error("Upload recording failed:", e)
-          // continue uploading remaining recordings
+          console.error(`Upload recording ${i + 1} failed:`, e)
+          failedIndices.push(i + 1)
         }
         setUploadProgress(Math.round(((i + 1) / recordings.length) * 100))
+      }
+
+      // Retry any failed uploads once more
+      if (failedIndices.length > 0) {
+        const retryFailed = [...failedIndices]
+        failedIndices.length = 0
+        for (const idx of retryFailed) {
+          const rec = recordings[idx - 1]
+          try {
+            const ok = await uploadRecording(
+              sessionId!,
+              rec.partId,
+              rec.questionId,
+              rec.partOrder,
+              rec.questionOrder,
+              rec.blob,
+              rec.duration
+            )
+            if (ok) {
+              successCount++
+            } else {
+              failedIndices.push(idx)
+            }
+          } catch (e) {
+            failedIndices.push(idx)
+          }
+        }
       }
 
       const totalDuration = recordings.reduce((s, r) => s + r.duration, 0)
@@ -69,8 +101,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
 
       if (!submitOk) {
         setUploadError(prev => prev || "Failed to submit exam. Please contact support.")
-      } else if (successCount < recordings.length && recordings.length > 0) {
-        setUploadError(`Uploaded ${successCount}/${recordings.length} recordings. Some may have failed.`)
+      } else if (failedIndices.length > 0) {
+        setUploadError(`Failed to upload recording(s) ${failedIndices.join(", ")}. Please contact support.`)
       }
       setUploading(false)
       setUploadDone(true)

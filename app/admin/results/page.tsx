@@ -310,7 +310,11 @@ function ResultDetail({
 }) {
   const [score, setScore] = useState(result.overall_score?.toString() ?? "")
   const [feedback, setFeedback] = useState(result.feedback ?? "")
-  const [notes, setNotes] = useState(result.teacher_notes ?? "")
+  // Strip AI summary JSON from teacher_notes for display
+  const [notes, setNotes] = useState(() => {
+    const raw = result.teacher_notes ?? ""
+    return raw.replace(/\n?\{[^{}]*"ai_assessment"\s*:\s*true[^{}]*\}/g, "").trim()
+  })
   const [submitting, setSubmitting] = useState(false)
   const [graded, setGraded] = useState(result.status === "graded")
   const [aiAssessing, setAiAssessing] = useState(false)
@@ -323,6 +327,99 @@ function ResultDetail({
   const [criteriaTotal, setCriteriaTotal] = useState<number | null>(null)
   const [maxCriteria, setMaxCriteria] = useState<number | null>(null)
   const [showCostDetails, setShowCostDetails] = useState(false)
+
+  // Restore AI assessment data from persisted recording scores on mount
+  useEffect(() => {
+    if (result.status !== "graded") return
+
+    // Try to restore per-recording AI scores from stored JSON feedback
+    const restoredMap: Record<string, AiRecordingScore> = {}
+    let hasAiData = false
+
+    // Iterate through parts->questions to find stored recording scores
+    for (const part of result.parts ?? []) {
+      for (const q of part.questions ?? []) {
+        if (!q.recording_id || q.feedback == null) continue
+        try {
+          const parsed = JSON.parse(q.feedback)
+          if (parsed && typeof parsed === "object" && "transcript" in parsed) {
+            hasAiData = true
+            restoredMap[q.recording_id] = {
+              recording_id: q.recording_id,
+              score: q.score ?? 0,
+              feedback: parsed.feedback ?? "",
+              transcript: parsed.transcript,
+              fluency_metrics: parsed.fluency_metrics,
+              grammar: parsed.grammar,
+              vocabulary: parsed.vocabulary,
+              pronunciation: parsed.pronunciation,
+              fluency: parsed.fluency,
+              coherence: parsed.coherence,
+              level_achieved: parsed.level_achieved,
+              strengths: parsed.strengths,
+              improvements: parsed.improvements,
+              part_type: parsed.part_type,
+              part_label: parsed.part_label,
+              max_score: parsed.max_score,
+            }
+          }
+        } catch {
+          // Not JSON — plain text feedback, skip
+        }
+      }
+    }
+
+    // Also check recordings array
+    for (const rec of result.recordings ?? []) {
+      if (!rec.id || rec.feedback == null || restoredMap[rec.id]) continue
+      try {
+        const parsed = JSON.parse(rec.feedback)
+        if (parsed && typeof parsed === "object" && "transcript" in parsed) {
+          hasAiData = true
+          restoredMap[rec.id] = {
+            recording_id: rec.id,
+            score: rec.score ?? 0,
+            feedback: parsed.feedback ?? "",
+            transcript: parsed.transcript,
+            fluency_metrics: parsed.fluency_metrics,
+            grammar: parsed.grammar,
+            vocabulary: parsed.vocabulary,
+            pronunciation: parsed.pronunciation,
+            fluency: parsed.fluency,
+            coherence: parsed.coherence,
+            level_achieved: parsed.level_achieved,
+            strengths: parsed.strengths,
+            improvements: parsed.improvements,
+            part_type: parsed.part_type,
+            part_label: parsed.part_label,
+            max_score: parsed.max_score,
+          }
+        }
+      } catch {
+        // Not JSON — plain text feedback
+      }
+    }
+
+    if (hasAiData) {
+      setAiScores(restoredMap)
+    }
+
+    // Try to restore AI summary from teacher_notes
+    const notesStr = result.teacher_notes ?? ""
+    try {
+      // Find JSON object in teacher_notes (may have text before it)
+      const jsonMatch = notesStr.match(/\{[^{}]*"ai_assessment"\s*:\s*true[^{}]*\}/)
+      if (jsonMatch) {
+        const summary = JSON.parse(jsonMatch[0])
+        if (summary.overall_level) setAiLevel(summary.overall_level)
+        if (summary.criteria_total != null) setCriteriaTotal(summary.criteria_total)
+        if (summary.max_criteria != null) setMaxCriteria(summary.max_criteria)
+        if (summary.cost) setAiCost(summary.cost)
+      }
+    } catch {
+      // No AI summary in teacher_notes
+    }
+  }, [result])
 
   const handleAiAssess = async () => {
     setAiAssessing(true)
@@ -605,24 +702,26 @@ function ResultDetail({
                       <span className="font-medium">{fmt(aiCost.whisper_cost_usd)}</span>
                     </div>
                     <div className="flex justify-between">
-                      {/* Backend sends gpt_input_tokens */}
                       <span className="text-muted-foreground">
-                        GPT Input ({aiCost.gpt_input_tokens?.toLocaleString?.() ?? "—"} tokens)
+                        GPT Input ({aiCost.gpt_input_tokens?.toLocaleString?.() ?? "0"} tokens)
                       </span>
-                      {/* Backend sends gpt_cost (combined), no split — show proportional or just dash */}
-                      <span className="font-medium">{fmt(aiCost.gpt_cost_usd)}</span>
+                      <span className="font-medium">{fmt(aiCost.gpt_input_cost_usd ?? 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
-                        GPT Output ({aiCost.gpt_output_tokens?.toLocaleString?.() ?? "—"} tokens)
+                        GPT Output ({aiCost.gpt_output_tokens?.toLocaleString?.() ?? "0"} tokens)
                       </span>
-                      {/* gpt_cost_usd covers both input+output combined; show dash for output line */}
-                      <span className="font-medium text-muted-foreground">—</span>
+                      <span className="font-medium">{fmt(aiCost.gpt_output_cost_usd ?? 0)}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-border font-semibold">
                       <span>Total</span>
                       <span>{fmt(aiCost.total_cost_usd)}</span>
                     </div>
+                    {aiCost.gpt_input_tokens === 0 && aiCost.gpt_output_tokens === 0 && aiCost.whisper_minutes > 0 && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        ⚠ GPT was not called — Whisper returned no speech for all recordings.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -660,7 +759,7 @@ function ResultDetail({
                       <div className="flex items-center gap-2 shrink-0">
                         {rs.score != null && (
                           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground">
-                            {rs.score} / 75
+                            {rs.score} / {rs.max_score ?? 5}
                           </span>
                         )}
                         {rs.level_achieved && (

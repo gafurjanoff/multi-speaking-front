@@ -145,7 +145,8 @@ export async function uploadRecording(
   partOrder: number,
   questionOrder: number,
   blob: Blob,
-  duration: number
+  duration: number,
+  maxRetries = 3
 ): Promise<boolean> {
   // Use the blob's actual MIME type to derive the correct file extension.
   // MediaRecorder sets blob.type to whatever the browser encoded:
@@ -163,19 +164,35 @@ export async function uploadRecording(
   const mime = blob.type.split(";")[0].trim() // strip ";codecs=opus" etc.
   const ext  = mimeToExt[mime] ?? "webm"
 
-  const form = new FormData()
-  form.append("part_id", partId)
-  form.append("question_id", questionId)
-  form.append("part_order", String(partOrder))
-  form.append("question_order", String(questionOrder))
-  form.append("duration", String(duration))
-  form.append("file", blob, `${partId}_${questionId}.${ext}`)
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const form = new FormData()
+      form.append("part_id", partId)
+      form.append("question_id", questionId)
+      form.append("part_order", String(partOrder))
+      form.append("question_order", String(questionOrder))
+      form.append("duration", String(duration))
+      form.append("file", blob, `${partId}_${questionId}.${ext}`)
 
-  const res = await fetchWithAuth(`/api/sessions/${sessionId}/recordings`, {
-    method: "POST",
-    body: form,
-  })
-  return res.ok
+      const res = await fetchWithAuth(`/api/sessions/${sessionId}/recordings`, {
+        method: "POST",
+        body: form,
+      })
+      if (res.ok) return true
+      // Server error → retry
+      if (res.status >= 500 && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, attempt * 2000))
+        continue
+      }
+      return false
+    } catch (err) {
+      console.error(`Upload attempt ${attempt}/${maxRetries} failed:`, err)
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, attempt * 2000))
+      }
+    }
+  }
+  return false
 }
 
 // ── Results (student) ──
@@ -495,6 +512,8 @@ export interface AiAssessmentCost {
   whisper_cost_usd: number
   gpt_input_tokens: number
   gpt_output_tokens: number
+  gpt_input_cost_usd: number
+  gpt_output_cost_usd: number
   /** Combined input + output GPT cost */
   gpt_cost_usd: number
   total_cost_usd: number
