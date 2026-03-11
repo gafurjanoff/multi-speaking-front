@@ -529,7 +529,7 @@ function ResultDetail({
                       Assessment Cost
                     </p>
                     <p className="text-2xl font-bold text-foreground">
-                      ${aiCost.total_cost.toFixed(4)}
+                      {typeof aiCost.total_cost === 'number' ? `$${aiCost.total_cost.toFixed(4)}` : '-'}
                     </p>
                   </div>
                 )}
@@ -541,20 +541,20 @@ function ResultDetail({
                   <p className="text-xs font-semibold text-muted-foreground mb-3">Cost Breakdown</p>
                   <div className="grid gap-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Whisper ({aiCost.whisper_minutes.toFixed(2)} min)</span>
-                      <span className="font-medium">${aiCost.whisper_cost.toFixed(4)}</span>
+                      <span className="text-muted-foreground">Whisper ({typeof aiCost.whisper_minutes === 'number' ? aiCost.whisper_minutes.toFixed(2) : '-'} min)</span>
+                      <span className="font-medium">{typeof aiCost.whisper_cost === 'number' ? `$${aiCost.whisper_cost.toFixed(4)}` : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">GPT Input ({aiCost.gpt_input_tokens.toLocaleString()} tokens)</span>
-                      <span className="font-medium">${aiCost.gpt_input_cost.toFixed(4)}</span>
+                      <span className="text-muted-foreground">GPT Input ({aiCost.gpt_input_tokens?.toLocaleString?.() ?? '-'} tokens)</span>
+                      <span className="font-medium">{typeof aiCost.gpt_input_cost === 'number' ? `$${aiCost.gpt_input_cost.toFixed(4)}` : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">GPT Output ({aiCost.gpt_output_tokens.toLocaleString()} tokens)</span>
-                      <span className="font-medium">${aiCost.gpt_output_cost.toFixed(4)}</span>
+                      <span className="text-muted-foreground">GPT Output ({aiCost.gpt_output_tokens?.toLocaleString?.() ?? '-'} tokens)</span>
+                      <span className="font-medium">{typeof aiCost.gpt_output_cost === 'number' ? `$${aiCost.gpt_output_cost.toFixed(4)}` : '-'}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-border font-semibold">
                       <span>Total</span>
-                      <span>${aiCost.total_cost.toFixed(4)}</span>
+                      <span>{typeof aiCost.total_cost === 'number' ? `$${aiCost.total_cost.toFixed(4)}` : '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -607,7 +607,7 @@ function ResultDetail({
                           <p className="text-[10px] text-muted-foreground">Fillers</p>
                         </div>
                         <div className="text-center rounded-lg bg-background p-2 border border-border">
-                          <p className="text-lg font-bold text-foreground">{rs.fluency_metrics.avg_pause_duration.toFixed(1)}s</p>
+                          <p className="text-lg font-bold text-foreground">{typeof rs.fluency_metrics.avg_pause_duration === 'number' ? `${rs.fluency_metrics.avg_pause_duration.toFixed(1)}s` : '-'}</p>
                           <p className="text-[10px] text-muted-foreground">Avg Pause</p>
                         </div>
                         <div className="text-center rounded-lg bg-background p-2 border border-border">
