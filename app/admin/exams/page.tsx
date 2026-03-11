@@ -24,6 +24,9 @@ import {
   CheckCircle2,
   XCircle,
   X,
+  ChevronUp,
+  ChevronDown,
+  Clipboard,
 } from "lucide-react"
 
 /* ── Toast component ── */
@@ -614,6 +617,42 @@ function ExamForm({
     setParts(updated)
   }
 
+  const movePart = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= parts.length) return
+    const updated = [...parts]
+    const [moved] = updated.splice(fromIdx, 1)
+    updated.splice(toIdx, 0, moved)
+    setParts(updated.map((p, i) => ({ ...p, part_number: i + 1 })))
+    if (expandedPart === fromIdx) setExpandedPart(toIdx)
+    else if (expandedPart !== null) {
+      if (fromIdx < expandedPart && toIdx >= expandedPart) setExpandedPart(expandedPart - 1)
+      else if (fromIdx > expandedPart && toIdx <= expandedPart) setExpandedPart(expandedPart + 1)
+    }
+  }
+
+  const moveQuestion = (partIdx: number, fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= parts[partIdx].questions.length) return
+    const updated = [...parts]
+    const qs = [...updated[partIdx].questions]
+    const [moved] = qs.splice(fromIdx, 1)
+    qs.splice(toIdx, 0, moved)
+    updated[partIdx] = { ...updated[partIdx], questions: qs }
+    setParts(updated)
+  }
+
+  const handleImagePaste = async (partIdx: number, e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) await handleImageUpload(partIdx, file)
+        return
+      }
+    }
+  }
+
   const inputClass =
     "w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-primary/20"
   const labelClass =
@@ -765,7 +804,25 @@ function ExamForm({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); movePart(pIdx, pIdx - 1) }}
+                      disabled={pIdx === 0}
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      title="Move up"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); movePart(pIdx, pIdx + 1) }}
+                      disabled={pIdx === parts.length - 1}
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      title="Move down"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -890,7 +947,7 @@ function ExamForm({
 
                     {/* ── Part-level images (for Part 1.2 and Part 2) ── */}
                     {showImages && (
-                      <div>
+                      <div tabIndex={0} onPaste={(e) => handleImagePaste(pIdx, e)} className="outline-none">
                         <div className="flex items-center justify-between mb-2">
                           <label className={labelClass}>
                             <ImageIcon className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
@@ -935,9 +992,13 @@ function ExamForm({
                             ))}
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center rounded-xl border-2 border-dashed border-border py-6">
+                          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border py-6">
                             <p className="text-xs text-muted-foreground">
-                              No images yet. Upload images for this part.
+                              No images yet. Upload or paste images for this part.
+                            </p>
+                            <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                              <Clipboard className="h-3 w-3" />
+                              Click here, then Ctrl+V / ⌘V to paste
                             </p>
                           </div>
                         )}
@@ -993,13 +1054,33 @@ function ExamForm({
                                   }
                                 />
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => removeQuestion(pIdx, qIdx)}
-                                className="mt-6 rounded-lg p-1 text-red-400 hover:text-red-600 transition-colors"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="mt-6 flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => moveQuestion(pIdx, qIdx, qIdx - 1)}
+                                  disabled={qIdx === 0}
+                                  className="rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveQuestion(pIdx, qIdx, qIdx + 1)}
+                                  disabled={qIdx === part.questions.length - 1}
+                                  className="rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeQuestion(pIdx, qIdx)}
+                                  className="rounded p-0.5 text-red-400 hover:text-red-600 transition-colors"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
 
                             {/* Sub-questions (Part 2 only) */}

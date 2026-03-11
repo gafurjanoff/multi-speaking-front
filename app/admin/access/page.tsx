@@ -82,7 +82,8 @@ export default function AdminAccessPage() {
 
   // Confirm dialogs
   const [revokeConfirm, setRevokeConfirm] = useState<{ id: string; user_name: string; exam_title: string } | null>(null)
-  const [grantConfirm, setGrantConfirm] = useState<{ user: AdminUser; examId: string; examTitle: string } | null>(null)
+  const [grantConfirm, setGrantConfirm] = useState<{ users: AdminUser[]; examId: string; examTitle: string } | null>(null)
+  const [selectedForGrant, setSelectedForGrant] = useState<Set<string>>(new Set())
 
   const showToast = useCallback((message: string, type: ToastType) => {
     setToast({ message, type })
@@ -141,19 +142,44 @@ export default function AdminAccessPage() {
   )
 
   const handleGrant = async (user: AdminUser, examId: string, examTitle: string) => {
-    setGrantConfirm({ user, examId, examTitle })
+    setGrantConfirm({ users: [user], examId, examTitle })
+  }
+
+  const handleBulkGrant = (examId: string, examTitle: string) => {
+    const users = allUsers.filter((u) => selectedForGrant.has(u.id))
+    if (users.length === 0) return
+    setGrantConfirm({ users, examId, examTitle })
+  }
+
+  const toggleSelectUser = (userId: string) => {
+    setSelectedForGrant((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
   }
 
   const handleGrantConfirm = async () => {
     if (!grantConfirm) return
-    const { user, examId } = grantConfirm
+    const { users, examId } = grantConfirm
     setGrantConfirm(null)
     setGranting(true)
-    const ok = await adminGrantAccess(user.id, examId)
-    if (ok) {
-      showToast(`Access granted to ${user.first_name || user.phone_number}`, "success")
+    let successCount = 0
+    for (const user of users) {
+      const ok = await adminGrantAccess(user.id, examId)
+      if (ok) successCount++
+    }
+    if (successCount > 0) {
+      showToast(
+        successCount === 1
+          ? `Access granted to ${users[0].first_name || users[0].phone_number}`
+          : `Access granted to ${successCount} students`,
+        "success"
+      )
       setAddingToExam(null)
       setUserSearch("")
+      setSelectedForGrant(new Set())
       await loadData()
     } else {
       showToast("Failed to grant access", "error")
@@ -246,6 +272,7 @@ export default function AdminAccessPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        setSelectedForGrant(new Set())
                         if (isAdding) {
                           setAddingToExam(null)
                           setUserSearch("")
@@ -287,39 +314,91 @@ export default function AdminAccessPage() {
                         className="w-full rounded-lg border border-border bg-background pl-9 pr-8 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/20"
                       />
                       <button
-                        onClick={() => { setAddingToExam(null); setUserSearch("") }}
+                        onClick={() => { setAddingToExam(null); setUserSearch(""); setSelectedForGrant(new Set()) }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-muted"
                       >
                         <X className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                      {availableUsersForExam(exam.id).length === 0 ? (
-                        <p className="py-3 text-center text-xs text-muted-foreground">
-                          {userSearch ? "No matching users found" : "All users already have access"}
-                        </p>
-                      ) : (
-                        availableUsersForExam(exam.id).slice(0, 20).map((u) => {
-                          const name = [u.first_name, u.last_name].filter(Boolean).join(" ")
-                          return (
-                            <button
-                              key={u.id}
-                              disabled={granting}
-                              onClick={() => handleGrant(u, exam.id, exam.title)}
-                              className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-background disabled:opacity-50"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">
-                                  {name || "No name"}
-                                </p>
-                                <p className="text-[11px] text-muted-foreground">{u.phone_number}</p>
-                              </div>
-                              <Plus className="h-4 w-4 shrink-0 text-primary" />
-                            </button>
-                          )
-                        })
-                      )}
-                    </div>
+                    {(() => {
+                      const available = availableUsersForExam(exam.id)
+                      const shown = available.slice(0, 50)
+                      const allSelected = shown.length > 0 && shown.every((u) => selectedForGrant.has(u.id))
+                      return (
+                        <>
+                          {shown.length > 0 && (
+                            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={() => {
+                                    if (allSelected) {
+                                      setSelectedForGrant(new Set())
+                                    } else {
+                                      setSelectedForGrant(new Set(shown.map((u) => u.id)))
+                                    }
+                                  }}
+                                  className="h-3.5 w-3.5 rounded border-border accent-[hsl(174,42%,51%)]"
+                                />
+                                Select all ({shown.length})
+                              </label>
+                              {selectedForGrant.size > 0 && (
+                                <button
+                                  type="button"
+                                  disabled={granting}
+                                  onClick={() => handleBulkGrant(exam.id, exam.title)}
+                                  className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                                  style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
+                                >
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                  Grant {selectedForGrant.size} selected
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          <div className="max-h-48 overflow-y-auto space-y-1 p-1">
+                            {available.length === 0 ? (
+                              <p className="py-3 text-center text-xs text-muted-foreground">
+                                {userSearch ? "No matching users found" : "All users already have access"}
+                              </p>
+                            ) : (
+                              shown.map((u) => {
+                                const name = [u.first_name, u.last_name].filter(Boolean).join(" ")
+                                return (
+                                  <div
+                                    key={u.id}
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-background"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedForGrant.has(u.id)}
+                                      onChange={() => toggleSelectUser(u.id)}
+                                      className="h-4 w-4 shrink-0 rounded border-border accent-[hsl(174,42%,51%)]"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-foreground truncate">
+                                        {name || "No name"}
+                                      </p>
+                                      <p className="text-[11px] text-muted-foreground">{u.phone_number}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={granting}
+                                      onClick={() => handleGrant(u, exam.id, exam.title)}
+                                      className="shrink-0 rounded-lg p-1.5 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                                      title="Grant access"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                )
+                              })
+                            )}
+                          </div>
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -412,7 +491,11 @@ export default function AdminAccessPage() {
             </DialogTitle>
             <DialogDescription>
               {grantConfirm && (
-                <>Grant <strong>{grantConfirm.user.first_name || grantConfirm.user.phone_number}</strong> access to <strong>{grantConfirm.examTitle}</strong>?</>
+                grantConfirm.users.length === 1 ? (
+                  <>Grant <strong>{grantConfirm.users[0].first_name || grantConfirm.users[0].phone_number}</strong> access to <strong>{grantConfirm.examTitle}</strong>?</>
+                ) : (
+                  <>Grant access to <strong>{grantConfirm.users.length} students</strong> for <strong>{grantConfirm.examTitle}</strong>?</>
+                )
               )}
             </DialogDescription>
           </DialogHeader>
