@@ -30,13 +30,14 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
   const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({})
 
   useEffect(() => {
-    if (!sessionId || startedUpload.current || recordings.length === 0) return
+    if (!sessionId || startedUpload.current) return
     startedUpload.current = true
 
     async function upload() {
       setUploading(true)
       setUploadError("")
 
+      // Even if no recordings, we should still submit the session
       let successCount = 0
       for (let i = 0; i < recordings.length; i++) {
         const rec = recordings[i]
@@ -51,16 +52,23 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
             rec.duration
           )
           if (ok) successCount++
-        } catch {
+        } catch (e) {
+          console.error("Upload recording failed:", e)
           // continue uploading remaining recordings
         }
         setUploadProgress(Math.round(((i + 1) / recordings.length) * 100))
       }
 
       const totalDuration = recordings.reduce((s, r) => s + r.duration, 0)
-      await submitSession(sessionId!, totalDuration)
+      try {
+        await submitSession(sessionId!, totalDuration)
+        console.log("Session submitted successfully")
+      } catch (e) {
+        console.error("Submit session failed:", e)
+        setUploadError("Failed to submit exam. Please contact support.")
+      }
 
-      if (successCount < recordings.length) {
+      if (successCount < recordings.length && recordings.length > 0) {
         setUploadError(`Uploaded ${successCount}/${recordings.length} recordings. Some may have failed.`)
       }
       setUploading(false)
