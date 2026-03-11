@@ -143,13 +143,29 @@ export async function uploadRecording(
   blob: Blob,
   duration: number
 ): Promise<boolean> {
+  // Use the blob's actual MIME type to derive the correct file extension.
+  // MediaRecorder sets blob.type to whatever the browser encoded:
+  //   Chrome  → "audio/webm" or "audio/webm;codecs=opus"
+  //   Safari  → "audio/mp4"
+  //   Firefox → "audio/ogg"
+  const mimeToExt: Record<string, string> = {
+    "audio/webm": "webm",
+    "audio/ogg":  "ogg",
+    "audio/mp4":  "mp4",
+    "audio/mpeg": "mp3",
+    "audio/wav":  "wav",
+    "video/webm": "webm", // some browsers report video/webm for audio-only tracks
+  }
+  const mime = blob.type.split(";")[0].trim() // strip ";codecs=opus" etc.
+  const ext  = mimeToExt[mime] ?? "webm"
+
   const form = new FormData()
   form.append("part_id", partId)
   form.append("question_id", questionId)
   form.append("part_order", String(partOrder))
   form.append("question_order", String(questionOrder))
   form.append("duration", String(duration))
-  form.append("file", blob, `${partId}_${questionId}.webm`)
+  form.append("file", blob, `${partId}_${questionId}.${ext}`)
 
   const res = await fetchWithAuth(`/api/sessions/${sessionId}/recordings`, {
     method: "POST",
@@ -231,8 +247,7 @@ export async function fetchResultDetail(resultId: string): Promise<CandidateResu
   return res.json()
 }
 
-// ── Admin: Stats ──
-// ── Profile (current user, for certificate) ──
+// ── Profile ──
 
 export interface ProfileData {
   first_name?: string | null
@@ -256,6 +271,7 @@ export async function fetchProfile(): Promise<AdminUser | null> {
   return res.json()
 }
 
+// ── Admin: Stats ──
 
 export interface AdminStats {
   total_users: number
@@ -340,10 +356,7 @@ export async function adminCreateExam(body: object): Promise<boolean> {
   return res.ok
 }
 
-export async function adminUpdateExam(
-  examId: string,
-  body: object
-): Promise<boolean> {
+export async function adminUpdateExam(examId: string, body: object): Promise<boolean> {
   const res = await fetchWithAuth(`/api/admin/exams/${examId}`, {
     method: "PATCH",
     body: JSON.stringify(body),
@@ -413,18 +426,14 @@ export interface AdminResultDetail extends AdminResult {
   }[]
 }
 
-export async function adminFetchResults(
-  status?: string
-): Promise<AdminResult[]> {
+export async function adminFetchResults(status?: string): Promise<AdminResult[]> {
   const url = status ? `/api/admin/results?status=${status}` : "/api/admin/results"
   const res = await fetchWithAuth(url)
   if (!res.ok) return []
   return res.json()
 }
 
-export async function adminFetchResultDetail(
-  resultId: string
-): Promise<AdminResultDetail | null> {
+export async function adminFetchResultDetail(resultId: string): Promise<AdminResultDetail | null> {
   const res = await fetchWithAuth(`/api/admin/results/${resultId}`)
   if (!res.ok) return null
   return res.json()
@@ -448,27 +457,30 @@ export async function adminGradeResult(
 
 export interface AiRecordingScore {
   recording_id: string
-  score: number | null
-  feedback: string
-  transcription?: string
+  part_type?: string
+  part_label?: string
+  max_score?: number
+  /** Always a number (0 on error) — backend never returns null */
+  score: number
+  feedback?: string
+  error?: boolean
+  /** Backend field is "transcript", not "transcription" */
+  transcript?: string
   fluency_metrics?: {
     words_per_minute: number
     pause_count: number
     avg_pause_duration: number
     long_pauses: number
     filler_words: number
+    total_words: number
     speaking_rate: string
   }
-  criteria?: {
-    grammar?: number
-    vocabulary?: number
-    pronunciation?: number
-    fluency?: number
-    coherence?: number
-    task_response?: number
-    interaction?: number
-    overall_impression?: number
-  }
+  /** Criteria are top-level string fields, not a nested object with numbers */
+  grammar?: string
+  vocabulary?: string
+  pronunciation?: string
+  fluency?: string
+  coherence?: string
   level_achieved?: string
   strengths?: string[]
   improvements?: string[]
@@ -476,12 +488,12 @@ export interface AiRecordingScore {
 
 export interface AiAssessmentCost {
   whisper_minutes: number
+  whisper_cost_usd: number
   gpt_input_tokens: number
   gpt_output_tokens: number
-  whisper_cost: number
-  gpt_input_cost: number
-  gpt_output_cost: number
-  total_cost: number
+  /** Combined input + output GPT cost */
+  gpt_cost_usd: number
+  total_cost_usd: number
 }
 
 export interface AiAssessResponse {
@@ -505,7 +517,7 @@ export async function adminAiAssess(resultId: string): Promise<AiAssessResponse 
   return res.json()
 }
 
-// ── Exam Access (paid exam approval) ──
+// ── Exam Access ──
 
 export interface ExamAccessRecord {
   id: string
