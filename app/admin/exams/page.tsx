@@ -336,6 +336,7 @@ interface ForAgainstDraft {
 interface QuestionDraft {
   text: string
   sub_questions: string[]
+  images: string[]
   for_against_points: ForAgainstDraft[]
 }
 
@@ -394,7 +395,7 @@ const PART_DEFAULTS: Record<PartDraft["type"], Partial<PartDraft>> = {
 }
 
 function emptyQuestion(): QuestionDraft {
-  return { text: "", sub_questions: [], for_against_points: [] }
+  return { text: "", sub_questions: [], images: [], for_against_points: [] }
 }
 
 function emptyPart(partNumber: number): PartDraft {
@@ -425,6 +426,7 @@ function mapBackendToPartDrafts(detail: BackendExamDetail): PartDraft[] {
     questions: p.questions.map((q) => ({
       text: q.text,
       sub_questions: q.sub_questions ?? [],
+      images: q.images ?? [],
       for_against_points: (q.for_against ?? []).map((fa) => ({
         side: fa.side as "for" | "against",
         point_text: fa.point_text,
@@ -488,6 +490,7 @@ function ExamForm({
           .map((q) => ({
             text: q.text,
             sub_questions: q.sub_questions.filter((s) => s.trim()),
+            images: q.images.length > 0 ? q.images : null,
             for_against_points: q.for_against_points.filter(
               (f) => f.point_text.trim()
             ),
