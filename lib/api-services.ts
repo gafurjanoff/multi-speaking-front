@@ -164,6 +164,13 @@ export async function uploadRecording(
   const mime = blob.type.split(";")[0].trim() // strip ";codecs=opus" etc.
   const ext  = mimeToExt[mime] ?? "webm"
 
+  console.log(`[Upload] Preparing: part=${partId} q=${questionId} size=${blob.size} type=${blob.type} ext=${ext} duration=${duration}s`)
+
+  if (blob.size < 100) {
+    console.error(`[Upload] Recording too small (${blob.size} bytes) – skipping`)
+    return false
+  }
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const form = new FormData()
@@ -174,11 +181,16 @@ export async function uploadRecording(
       form.append("duration", String(duration))
       form.append("file", blob, `${partId}_${questionId}.${ext}`)
 
+      console.log(`[Upload] Attempt ${attempt}/${maxRetries}`)
       const res = await fetchWithAuth(`/api/sessions/${sessionId}/recordings`, {
         method: "POST",
         body: form,
       })
-      if (res.ok) return true
+      if (res.ok) {
+        console.log(`[Upload] Success on attempt ${attempt}`)
+        return true
+      }
+      console.error(`[Upload] Attempt ${attempt} HTTP ${res.status}`)
       // Server error → retry
       if (res.status >= 500 && attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, attempt * 2000))
@@ -186,7 +198,7 @@ export async function uploadRecording(
       }
       return false
     } catch (err) {
-      console.error(`Upload attempt ${attempt}/${maxRetries} failed:`, err)
+      console.error(`[Upload] Attempt ${attempt}/${maxRetries} failed:`, err)
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, attempt * 2000))
       }
