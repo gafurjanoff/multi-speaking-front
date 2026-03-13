@@ -25,6 +25,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
   const [uploadError, setUploadError] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const startedUpload = useRef(false)
+  const [retryTick, setRetryTick] = useState(0)
 
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({})
@@ -99,25 +100,28 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
         }
       }
 
-      const totalDuration = recordings.reduce((s, r) => s + r.duration, 0)
       let submitOk = false
-      try {
-        submitOk = await submitSession(sessionId!, totalDuration)
-      } catch (e) {
-        console.error("Submit session failed:", e)
-      }
-
-      if (!submitOk) {
-        setUploadError(prev => prev || "Failed to submit exam. Please contact support.")
-      } else if (failedIndices.length > 0) {
-        setUploadError(`Failed to upload ${failedIndices.length} recording(s). Please contact support.`)
+      if (failedIndices.length === 0) {
+        const totalDuration = recordings.reduce((s, r) => s + r.duration, 0)
+        try {
+          submitOk = await submitSession(sessionId!, totalDuration)
+        } catch (e) {
+          console.error("Submit session failed:", e)
+        }
+        if (!submitOk) {
+          setUploadError(prev => prev || "Failed to submit exam. Please retry in a moment.")
+          startedUpload.current = false
+        }
+      } else {
+        setUploadError(`Failed to upload ${failedIndices.length} recording(s). Please stay on this page and retry.`)
+        startedUpload.current = false
       }
       setUploading(false)
       setUploadDone(true)
     }
 
     upload()
-  }, [sessionId, recordings])
+  }, [sessionId, recordings, retryTick])
 
   const handlePlay = (recording: RecordingSegment) => {
     const id = `${recording.partId}-${recording.questionId}`
@@ -206,7 +210,18 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
       {uploadError && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
           <AlertCircle className="h-5 w-5 text-amber-600" />
-          <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{uploadError}</p>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{uploadError}</p>
+            {!uploading && (
+              <button
+                type="button"
+                onClick={() => setRetryTick((v) => v + 1)}
+                className="mt-2 rounded-lg border border-amber-400/50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
+              >
+                Retry Upload
+              </button>
+            )}
+          </div>
         </div>
       )}
 
