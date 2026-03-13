@@ -539,6 +539,7 @@ export interface AiAssessResponse {
   conversion_score?: number
   max_conversion?: number
   overall_level?: string
+  scoring_profile?: string
   general_feedback?: string
   cost?: AiAssessmentCost
   model?: string

@@ -326,6 +326,8 @@ function ResultDetail({
   const [aiLevel, setAiLevel] = useState<string | null>(null)
   const [criteriaTotal, setCriteriaTotal] = useState<number | null>(null)
   const [maxCriteria, setMaxCriteria] = useState<number | null>(null)
+  const [aiScoringProfile, setAiScoringProfile] = useState<string | null>(null)
+  const [aiModel, setAiModel] = useState<string | null>(null)
   const [showCostDetails, setShowCostDetails] = useState(false)
 
   // Restore AI assessment data from persisted recording scores on mount
@@ -407,14 +409,34 @@ function ResultDetail({
     // Try to restore AI summary from teacher_notes
     const notesStr = result.teacher_notes ?? ""
     try {
-      // Find JSON object in teacher_notes (may have text before it)
-      const jsonMatch = notesStr.match(/\{[^{}]*"ai_assessment"\s*:\s*true[^{}]*\}/)
-      if (jsonMatch) {
-        const summary = JSON.parse(jsonMatch[0])
-        if (summary.overall_level) setAiLevel(summary.overall_level)
-        if (summary.criteria_total != null) setCriteriaTotal(summary.criteria_total)
-        if (summary.max_criteria != null) setMaxCriteria(summary.max_criteria)
-        if (summary.cost) setAiCost(summary.cost)
+      // Find JSON object in teacher_notes (supports nested objects like cost)
+      const marker = notesStr.indexOf('"ai_assessment"')
+      if (marker >= 0) {
+        const start = notesStr.lastIndexOf("{", marker)
+        if (start >= 0) {
+          let depth = 0
+          let end = -1
+          for (let i = start; i < notesStr.length; i++) {
+            const ch = notesStr[i]
+            if (ch === "{") depth++
+            else if (ch === "}") {
+              depth--
+              if (depth === 0) {
+                end = i
+                break
+              }
+            }
+          }
+          if (end > start) {
+            const summary = JSON.parse(notesStr.slice(start, end + 1))
+            if (summary.overall_level) setAiLevel(summary.overall_level)
+            if (summary.criteria_total != null) setCriteriaTotal(summary.criteria_total)
+            if (summary.max_criteria != null) setMaxCriteria(summary.max_criteria)
+            if (summary.cost) setAiCost(summary.cost)
+            if (summary.scoring_profile) setAiScoringProfile(summary.scoring_profile)
+            if (summary.model) setAiModel(summary.model)
+          }
+        }
       }
     } catch {
       // No AI summary in teacher_notes
@@ -453,6 +475,8 @@ function ResultDetail({
     if (data.overall_level) setAiLevel(data.overall_level)
     if (data.criteria_total != null) setCriteriaTotal(data.criteria_total)
     if (data.max_criteria != null) setMaxCriteria(data.max_criteria)
+    if (data.scoring_profile) setAiScoringProfile(data.scoring_profile)
+    if (data.model) setAiModel(data.model)
     if (data.general_feedback) setFeedback(data.general_feedback)
     await onRefetch?.()
   }
@@ -637,12 +661,26 @@ function ResultDetail({
           </div>
 
           {/* AI Assessment Summary */}
-          {(aiLevel || criteriaTotal !== null || aiCost) && (
+          {(aiLevel || criteriaTotal !== null || aiCost || aiScoringProfile || aiModel) && (
             <div className="rounded-2xl border border-border bg-card p-5">
               <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <BarChart2 className="h-4 w-4" />
                 AI Assessment Summary
               </h3>
+              {(aiScoringProfile || aiModel) && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {aiScoringProfile && (
+                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                      Profile: {aiScoringProfile}
+                    </span>
+                  )}
+                  {aiModel && (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
+                      Model: {aiModel}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {aiLevel && (
                   <div className="rounded-xl border border-border bg-muted/20 p-4">
