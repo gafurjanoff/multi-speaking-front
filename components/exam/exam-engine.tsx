@@ -12,7 +12,7 @@ import { QuestionCard } from "./question-card"
 import { ForAgainstCard } from "./for-against-card"
 import { ExamComplete } from "./exam-complete"
 import { PartTransition } from "./part-transition"
-import { startSession } from "@/lib/api-services"
+import { startSession, uploadRecording } from "@/lib/api-services"
 import { Mic, Clock, Volume2, AlertCircle } from "lucide-react"
 
 interface ExamEngineProps {
@@ -220,17 +220,49 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     const blob = await stopRecording()
 
     if (blob) {
+      const partId = currentPart.id
+      const questionId = currentQuestion.id
+      const partOrder = currentPartIndex
+      const questionOrder = currentQuestionIndex
+      const duration = currentPart.answerTime - timeRemaining
+
       setRecordings((prev) => [
         ...prev,
         {
-          partId: currentPart.id,
-          questionId: currentQuestion.id,
-          partOrder: currentPartIndex,
-          questionOrder: currentQuestionIndex,
+          partId,
+          questionId,
+          partOrder,
+          questionOrder,
           blob,
-          duration: currentPart.answerTime - timeRemaining,
+          duration,
+          uploaded: false,
         },
       ])
+
+      // Reliability: upload right away (not only on final screen).
+      // If user closes tab later, earlier answers are already persisted.
+      if (sessionId) {
+        void (async () => {
+          const ok = await uploadRecording(
+            sessionId,
+            partId,
+            questionId,
+            partOrder,
+            questionOrder,
+            blob,
+            duration,
+          )
+          if (ok) {
+            setRecordings((prev) =>
+              prev.map((r) =>
+                r.partId === partId && r.questionId === questionId
+                  ? { ...r, uploaded: true }
+                  : r
+              )
+            )
+          }
+        })()
+      }
     }
 
     const hasMoreQuestions = currentQuestionIndex < currentPart.questions.length - 1
@@ -290,6 +322,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     currentPartIndex,
     exam.parts,
     stopRecording,
+    sessionId,
     timeRemaining,
     playCompleteSound,
     triggerAnimation,

@@ -42,6 +42,7 @@ export interface RecordingSegment {
   questionOrder: number
   blob: Blob
   duration: number
+  uploaded?: boolean
 }
 
 export interface ExamSession {

@@ -37,11 +37,15 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
       setUploading(true)
       setUploadError("")
 
-      // Even if no recordings, we should still submit the session
+      // Upload only pending recordings that were not already uploaded
+      // during the exam flow.
+      const pending = recordings.filter((r) => !r.uploaded)
+
+      // Even if no recordings/pending uploads, we should still submit session.
       const failedIndices: number[] = []
       let successCount = 0
-      for (let i = 0; i < recordings.length; i++) {
-        const rec = recordings[i]
+      for (let i = 0; i < pending.length; i++) {
+        const rec = pending[i]
         try {
           const ok = await uploadRecording(
             sessionId!,
@@ -61,7 +65,11 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
           console.error(`Upload recording ${i + 1} failed:`, e)
           failedIndices.push(i + 1)
         }
-        setUploadProgress(Math.round(((i + 1) / recordings.length) * 100))
+        setUploadProgress(
+          pending.length > 0
+            ? Math.round(((i + 1) / pending.length) * 100)
+            : 100
+        )
       }
 
       // Retry any failed uploads once more
@@ -69,7 +77,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
         const retryFailed = [...failedIndices]
         failedIndices.length = 0
         for (const idx of retryFailed) {
-          const rec = recordings[idx - 1]
+          const rec = pending[idx - 1]
           try {
             const ok = await uploadRecording(
               sessionId!,
@@ -102,7 +110,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
       if (!submitOk) {
         setUploadError(prev => prev || "Failed to submit exam. Please contact support.")
       } else if (failedIndices.length > 0) {
-        setUploadError(`Failed to upload recording(s) ${failedIndices.join(", ")}. Please contact support.`)
+        setUploadError(`Failed to upload ${failedIndices.length} recording(s). Please contact support.`)
       }
       setUploading(false)
       setUploadDone(true)
