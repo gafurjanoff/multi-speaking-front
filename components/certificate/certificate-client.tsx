@@ -40,6 +40,7 @@ export function CertificateClient({ result, student }: CertificateClientProps) {
             <div className="cert-divider" />
             <CertAwardee
               fullName={fullName}
+              photoUrl={student?.avatar}
               dateOfBirth={student?.dateOfBirth}
             />
             <CertExamInfo

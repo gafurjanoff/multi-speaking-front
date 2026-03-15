@@ -67,6 +67,7 @@ export default function CertificatePage({
         name: user.name,
         email: user.email,
         role: "student" as const,
+        avatar: user.photoUrl ?? undefined,
         createdAt: "",
         level: "",
         totalExamsTaken: 0,
