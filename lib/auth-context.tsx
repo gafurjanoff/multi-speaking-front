@@ -35,6 +35,8 @@ interface UserOut {
   is_verified: boolean
   is_admin: boolean
   photo_url: string | null
+  /** Proxy URL for display (avoids CORB with R2). Prefer over photo_url for <img>. */
+  photo_url_display?: string | null
   last_login: string | null
   created_at: string
 }
@@ -47,7 +49,7 @@ function mapUserOutToUser(out: UserOut): User {
     email: out.phone_number,
     role: out.is_admin ? "admin" : "student",
     isAdmin: out.is_admin,
-    photoUrl: out.photo_url,
+    photoUrl: out.photo_url_display ?? out.photo_url ?? null,
     createdAt: out.created_at,
   }
 }

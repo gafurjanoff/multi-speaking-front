@@ -34,7 +34,7 @@ export default function ProfilePage() {
         setFirstName(p.first_name ?? "")
         setLastName(p.last_name ?? "")
         setPhone(p.phone_number ?? "")
-        setPhotoUrl(p.photo_url ?? null)
+        setPhotoUrl((p.photo_url_display ?? p.photo_url) ?? null)
       }
       setLoading(false)
     })
@@ -66,7 +66,7 @@ export default function ProfilePage() {
     if (ok) {
       await refreshUser()
       const p = await fetchProfile()
-      if (p) setPhotoUrl(p.photo_url ?? null)
+      if (p) setPhotoUrl((p.photo_url_display ?? p.photo_url) ?? null)
       setMessage({ type: "success", text: "Profile photo updated." })
     } else {
       setMessage({ type: "error", text: "Photo upload failed. Max 5 MB, JPEG/PNG/WebP." })
@@ -82,7 +82,7 @@ export default function ProfilePage() {
     if (ok) {
       await refreshUser()
       const p = await fetchProfile()
-      if (p) setPhotoUrl(p.photo_url ?? null)
+      if (p) setPhotoUrl((p.photo_url_display ?? p.photo_url) ?? null)
       setMessage({ type: "success", text: "Profile photo synced from Telegram." })
     } else {
       setMessage({ type: "error", text: "No Telegram profile photo found or sync failed." })

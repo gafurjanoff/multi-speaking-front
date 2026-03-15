@@ -371,6 +371,8 @@ export interface AdminUser {
   is_verified: boolean
   is_admin: boolean
   photo_url: string | null
+  /** Proxy URL for display (avoids CORB). Prefer for <img>. */
+  photo_url_display?: string | null
   last_login: string | null
   created_at: string
 }
