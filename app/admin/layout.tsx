@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import { useAuth } from "@/lib/auth-context"
@@ -16,6 +17,7 @@ import {
   Moon,
   ChevronLeft,
   CreditCard,
+  Settings,
   Menu,
   X,
 } from "lucide-react"
@@ -26,6 +28,7 @@ const navItems = [
   { href: "/admin/results", label: "Results", icon: ClipboardCheck },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/access", label: "Exam Access", icon: CreditCard },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -170,12 +173,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="flex items-center justify-between px-3 py-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
-              >
-                {user.name.charAt(0).toUpperCase()}
-              </div>
+              {user.photoUrl ? (
+                <Image
+                  src={user.photoUrl}
+                  alt={user.name}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                  style={{ backgroundColor: "hsl(174, 42%, 51%)" }}
+                >
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <span className="truncate text-xs font-medium text-foreground">
                 {user.name}
               </span>

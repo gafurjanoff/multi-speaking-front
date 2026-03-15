@@ -304,6 +304,45 @@ export async function fetchProfile(): Promise<AdminUser | null> {
   return res.json()
 }
 
+// ── Admin: Settings ──
+
+export interface AdminSettings {
+  ai_scoring_profile: "strict" | "normal" | "lenient"
+}
+
+export async function adminFetchSettings(): Promise<AdminSettings | null> {
+  const res = await fetchWithAuth("/api/admin/settings")
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function adminUpdateSettings(body: AdminSettings): Promise<boolean> {
+  const res = await fetchWithAuth("/api/admin/settings", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+  return res.ok
+}
+
+// ── Profile photo ──
+
+export async function uploadProfilePhoto(file: File): Promise<boolean> {
+  const form = new FormData()
+  form.append("file", file)
+  const res = await fetchWithAuth("/api/auth/me/photo", {
+    method: "POST",
+    body: form,
+  })
+  return res.ok
+}
+
+export async function syncTelegramPhoto(): Promise<boolean> {
+  const res = await fetchWithAuth("/api/auth/me/photo/sync-telegram", {
+    method: "POST",
+  })
+  return res.ok
+}
+
 // ── Admin: Stats ──
 
 export interface AdminStats {
@@ -331,6 +370,7 @@ export interface AdminUser {
   telegram_id: number
   is_verified: boolean
   is_admin: boolean
+  photo_url: string | null
   last_login: string | null
   created_at: string
 }

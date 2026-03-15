@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useTheme } from "next-themes"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -68,12 +69,22 @@ export function AppHeader() {
                 </Button>
               </Link>
               <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5">
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ backgroundColor: "hsl(var(--exam-primary))" }}
-                >
-                  {user.name.charAt(0)}
-                </div>
+                {user.photoUrl ? (
+                  <Image
+                    src={user.photoUrl}
+                    alt={user.name}
+                    width={28}
+                    height={28}
+                    className="h-7 w-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white"
+                    style={{ backgroundColor: "hsl(var(--exam-primary))" }}
+                  >
+                    {user.name.charAt(0)}
+                  </div>
+                )}
                 <span className="hidden text-sm font-medium text-foreground sm:inline">{user.name}</span>
               </div>
               <Button

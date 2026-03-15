@@ -34,6 +34,7 @@ interface UserOut {
   telegram_id: number
   is_verified: boolean
   is_admin: boolean
+  photo_url: string | null
   last_login: string | null
   created_at: string
 }
@@ -46,6 +47,7 @@ function mapUserOutToUser(out: UserOut): User {
     email: out.phone_number,
     role: out.is_admin ? "admin" : "student",
     isAdmin: out.is_admin,
+    photoUrl: out.photo_url,
     createdAt: out.created_at,
   }
 }

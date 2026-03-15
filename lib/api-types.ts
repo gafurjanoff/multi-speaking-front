@@ -29,6 +29,7 @@ export interface User {
   email: string
   role: UserRole
   avatar?: string
+  photoUrl?: string | null
   createdAt: string
   isAdmin?: boolean
 }
