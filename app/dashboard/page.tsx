@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { AppHeader } from "@/components/app-header"
 import { BookOpen, Trophy, Clock } from "lucide-react"
-import { fetchExams, fetchMyResults, type UserResult } from "@/lib/api-services"
+import { fetchContactInfo, fetchExams, fetchMyResults, type UserResult } from "@/lib/api-services"
 import type { ExamCard, ExamResult } from "@/lib/api-types"
 
 import { ProfileHeader } from "@/components/dashboard/profile-header"
@@ -55,6 +55,7 @@ function DashboardContent() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview")
   const [examCards, setExamCards] = useState<ExamCard[]>([])
   const [results, setResults] = useState<ExamResult[]>([])
+  const [upsellText, setUpsellText] = useState<string>("")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -66,6 +67,7 @@ function DashboardContent() {
     if (!user) return
     fetchExams().then((data) => setExamCards(data))
     fetchMyResults().then((data) => setResults(data.map(mapBackendResult)))
+    fetchContactInfo().then((c) => setUpsellText(c?.upsell_text ?? ""))
   }, [user])
 
   useEffect(() => {
@@ -146,7 +148,7 @@ function DashboardContent() {
           <OverviewTab examCards={examCards} latestResult={latestResult} />
         )}
 
-        {activeTab === "exams" && <ExamsTab results={results} />}
+        {activeTab === "exams" && <ExamsTab results={results} examCards={examCards} upsellText={upsellText} />}
 
         {activeTab === "leaderboard" && (
           <LeaderboardTab entries={leaderboard} currentUserId={user.id} />

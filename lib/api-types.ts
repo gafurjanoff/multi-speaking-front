@@ -71,6 +71,11 @@ export interface ExamCard {
   isFree: boolean
   isMock: boolean
   isPublished: boolean
+  freeAttemptLimit?: number
+  mockAttemptLimit?: number
+  accessValidityDays?: number
+  shuffleQuestionsForMock?: boolean
+  autoAiAssessment?: boolean
   questionsCount: number
 }
 
@@ -86,7 +91,7 @@ export interface ExamResult {
   completedAt: string
   recordings: RecordingResult[]
   totalDuration: number
-  status: "pending_review" | "reviewed" | "graded"
+  status: "pending_review" | "reviewed" | "graded" | "processing_ai"
   score?: number
   feedback?: string
   teacherNotes?: string

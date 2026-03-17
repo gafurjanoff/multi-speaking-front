@@ -97,6 +97,7 @@ export function ExamLobby({ exam, onStart }: ExamLobbyProps) {
                   This is a mock exam under real conditions. Audio instructions will play automatically, 
                   timers will start after the instruction ends, and you cannot pause or go back. 
                   Your recordings will be assessed by AI and results sent to you.
+                  Attempts available: {exam.mockAttemptLimit ?? 5} within {exam.accessValidityDays ?? 30} days after access approval.
                 </p>
               </div>
             </div>
@@ -109,7 +110,7 @@ export function ExamLobby({ exam, onStart }: ExamLobbyProps) {
                 <p className="text-sm font-semibold text-green-800 dark:text-green-300">Free Practice Mode</p>
                 <p className="mt-1 text-xs leading-relaxed text-green-700 dark:text-green-400">
                   You can start each part manually and take your time reading instructions.
-                  This is ideal for getting familiar with the exam format.
+                  This is ideal for getting familiar with the exam format. Attempts available: {exam.freeAttemptLimit ?? 3}.
                 </p>
               </div>
             </div>

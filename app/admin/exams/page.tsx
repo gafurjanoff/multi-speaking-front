@@ -348,6 +348,7 @@ interface PartDraft {
   images: string[]
   prep_time: number
   answer_time: number
+  mock_questions_to_ask: number
   questions: QuestionDraft[]
 }
 
@@ -372,24 +373,28 @@ const PART_DEFAULTS: Record<PartDraft["type"], Partial<PartDraft>> = {
     title: "Part 1 \u2013 Short Questions",
     prep_time: 5,
     answer_time: 30,
+    mock_questions_to_ask: 0,
     instruction: INSTRUCTION_PART1,
   },
   part1_photos: {
     title: "Part 1.2 \u2013 Photo Questions",
     prep_time: 10,
     answer_time: 45,
+    mock_questions_to_ask: 0,
     instruction: "",
   },
   part2: {
     title: "Part 2 \u2013 Long Turn",
     prep_time: 60,
     answer_time: 120,
+    mock_questions_to_ask: 0,
     instruction: INSTRUCTION_PART2,
   },
   part3: {
     title: "Part 3 \u2013 For & Against",
     prep_time: 60,
     answer_time: 120,
+    mock_questions_to_ask: 0,
     instruction: INSTRUCTION_PART3,
   },
 }
@@ -397,6 +402,9 @@ const PART_DEFAULTS: Record<PartDraft["type"], Partial<PartDraft>> = {
 function emptyQuestion(): QuestionDraft {
   return { text: "", sub_questions: [], images: [], for_against_points: [] }
 }
+
+const MAX_IMAGE_SIZE_MB = 8
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
 
 function emptyPart(partNumber: number): PartDraft {
   return {
@@ -407,6 +415,7 @@ function emptyPart(partNumber: number): PartDraft {
     images: [],
     prep_time: 5,
     answer_time: 30,
+    mock_questions_to_ask: 0,
     questions: [emptyQuestion()],
   }
 }
@@ -423,6 +432,7 @@ function mapBackendToPartDrafts(detail: BackendExamDetail): PartDraft[] {
     images: p.images ?? [],
     prep_time: p.prep_time,
     answer_time: p.answer_time,
+    mock_questions_to_ask: p.mock_questions_to_ask ?? 0,
     questions: p.questions.map((q) => ({
       text: q.text,
       sub_questions: q.sub_questions ?? [],
@@ -450,8 +460,14 @@ function ExamForm({
   const [isFree, setIsFree] = useState(exam?.isFree ?? false)
   const [isMock, setIsMock] = useState(exam?.isMock ?? true)
   const [isPublished, setIsPublished] = useState(exam?.isPublished ?? false)
+  const [freeAttemptLimit, setFreeAttemptLimit] = useState(exam?.freeAttemptLimit ?? 3)
+  const [mockAttemptLimit, setMockAttemptLimit] = useState(exam?.mockAttemptLimit ?? 5)
+  const [accessValidityDays, setAccessValidityDays] = useState(exam?.accessValidityDays ?? 30)
+  const [shuffleQuestionsForMock, setShuffleQuestionsForMock] = useState(exam?.shuffleQuestionsForMock ?? true)
+  const [autoAiAssessment, setAutoAiAssessment] = useState(exam?.autoAiAssessment ?? true)
   const [parts, setParts] = useState<PartDraft[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState("")
   const [expandedPart, setExpandedPart] = useState<number | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -462,13 +478,54 @@ function ExamForm({
     adminFetchExamDetail(exam.id).then((detail) => {
       if (detail) {
         setParts(mapBackendToPartDrafts(detail))
+        setFreeAttemptLimit(detail.free_attempt_limit ?? 3)
+        setMockAttemptLimit(detail.mock_attempt_limit ?? 5)
+        setAccessValidityDays(detail.access_validity_days ?? 30)
+        setShuffleQuestionsForMock(detail.shuffle_questions_for_mock ?? true)
+        setAutoAiAssessment(detail.auto_ai_assessment ?? true)
       }
       setLoadingDetail(false)
     })
   }, [exam])
 
+  const validateExamConfig = (): string | null => {
+    for (let pIdx = 0; pIdx < parts.length; pIdx++) {
+      const part = parts[pIdx]
+      if (part.type !== "part1_photos") continue
+
+      const validSets = part.questions.filter((q) => q.text.trim())
+      if (part.mock_questions_to_ask > 0 && part.mock_questions_to_ask > validSets.length) {
+        return `Part ${pIdx + 1}: "Paid Questions To Ask" is ${part.mock_questions_to_ask}, but only ${validSets.length} photo set(s) are configured.`
+      }
+
+      for (let qIdx = 0; qIdx < part.questions.length; qIdx++) {
+        const q = part.questions[qIdx]
+        // Skip completely empty draft rows
+        if (!q.text.trim() && q.sub_questions.every((s) => !s.trim()) && q.images.length === 0) {
+          continue
+        }
+        if (!q.text.trim()) {
+          return `Part ${pIdx + 1}, Set ${qIdx + 1}: description question text is required.`
+        }
+        if (!q.images.length) {
+          return `Part ${pIdx + 1}, Set ${qIdx + 1}: photo image is required.`
+        }
+        if (!q.sub_questions.filter((s) => s.trim()).length) {
+          return `Part ${pIdx + 1}, Set ${qIdx + 1}: add at least one follow-up question.`
+        }
+      }
+    }
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError("")
+    const validationError = validateExamConfig()
+    if (validationError) {
+      setFormError(validationError)
+      return
+    }
     setSubmitting(true)
     await onSubmit({
       title,
@@ -477,6 +534,11 @@ function ExamForm({
       is_free: isFree,
       is_mock: isMock,
       is_published: isPublished,
+      free_attempt_limit: freeAttemptLimit,
+      mock_attempt_limit: mockAttemptLimit,
+      access_validity_days: accessValidityDays,
+      shuffle_questions_for_mock: shuffleQuestionsForMock,
+      auto_ai_assessment: autoAiAssessment,
       parts: parts.map((p) => ({
         type: p.type,
         title: p.title,
@@ -485,6 +547,7 @@ function ExamForm({
         images: p.images.length > 0 ? p.images : null,
         prep_time: p.prep_time,
         answer_time: p.answer_time,
+        mock_questions_to_ask: p.mock_questions_to_ask,
         questions: p.questions
           .filter((q) => q.text.trim() || q.sub_questions.some((s) => s.trim()) || q.for_against_points.some((f) => f.point_text.trim()))
           .map((q) => ({
@@ -603,13 +666,44 @@ function ExamForm({
     setParts(updated)
   }
 
+  const validateImageFile = (file: File): string | null => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      return "Only JPG, PNG, WEBP or GIF images are allowed."
+    }
+    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+      return `Image is too large. Max size is ${MAX_IMAGE_SIZE_MB}MB.`
+    }
+    return null
+  }
+
   const handleImageUpload = async (partIdx: number, file: File) => {
+    const validation = validateImageFile(file)
+    if (validation) {
+      setFormError(validation)
+      return
+    }
     setUploadingImage(true)
+    setFormError("")
     const url = await adminUploadImage(file)
     if (url) {
       const updated = [...parts]
       updated[partIdx].images.push(url)
       setParts(updated)
+    }
+    setUploadingImage(false)
+  }
+
+  const handleQuestionImageUpload = async (partIdx: number, qIdx: number, file: File) => {
+    const validation = validateImageFile(file)
+    if (validation) {
+      setFormError(validation)
+      return
+    }
+    setUploadingImage(true)
+    setFormError("")
+    const url = await adminUploadImage(file)
+    if (url) {
+      updateQuestion(partIdx, qIdx, { images: [url] })
     }
     setUploadingImage(false)
   }
@@ -656,6 +750,42 @@ function ExamForm({
     }
   }
 
+  const handleQuestionImagePaste = async (
+    partIdx: number,
+    qIdx: number,
+    e: React.ClipboardEvent
+  ) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) await handleQuestionImageUpload(partIdx, qIdx, file)
+        return
+      }
+    }
+  }
+
+  const handleQuestionImageDrop = async (
+    partIdx: number,
+    qIdx: number,
+    e: React.DragEvent
+  ) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files || []).filter((f) =>
+      f.type.startsWith("image/")
+    )
+    if (!files.length) return
+    const file = files[0]
+    const validation = validateImageFile(file)
+    if (validation) {
+      setFormError(validation)
+      return
+    }
+    await handleQuestionImageUpload(partIdx, qIdx, file)
+  }
+
   const inputClass =
     "w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-primary/20"
   const labelClass =
@@ -673,6 +803,11 @@ function ExamForm({
       </button>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {formError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+            {formError}
+          </div>
+        )}
         {/* ── Exam metadata ── */}
         <div className="rounded-2xl border border-border bg-card p-6">
           <h2 className="mb-5 text-xl font-bold text-foreground">
@@ -724,6 +859,58 @@ function ExamForm({
                 ))}
               </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Free Attempt Limit</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={freeAttemptLimit}
+                  onChange={(e) => setFreeAttemptLimit(Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Paid Attempt Limit</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={mockAttemptLimit}
+                  onChange={(e) => setMockAttemptLimit(Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Access Validity Days (Paid)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={accessValidityDays}
+                  onChange={(e) => setAccessValidityDays(Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-5">
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={shuffleQuestionsForMock}
+                  onChange={(e) => setShuffleQuestionsForMock(e.target.checked)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                Shuffle paid exam questions
+              </label>
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoAiAssessment}
+                  onChange={(e) => setAutoAiAssessment(e.target.checked)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                Auto AI assessment on submit
+              </label>
+            </div>
             <div>
               <label className={labelClass}>Description</label>
               <textarea
@@ -771,8 +958,7 @@ function ExamForm({
 
           {parts.map((part, pIdx) => {
             const isExpanded = expandedPart === pIdx
-            const showImages =
-              part.type === "part1_photos" || part.type === "part2"
+            const showImages = false
             const showForAgainst = part.type === "part3"
             const showInstruction = part.type !== "part1_photos"
 
@@ -851,7 +1037,7 @@ function ExamForm({
                 {/* Part body (expanded) */}
                 {isExpanded && (
                   <div className="border-t border-border px-5 py-4 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className={labelClass}>Part Type</label>
                         <select
@@ -946,11 +1132,42 @@ function ExamForm({
                           className={inputClass}
                         />
                       </div>
+                      <div>
+                        <label className={labelClass}>
+                          Paid Questions To Ask
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={part.mock_questions_to_ask}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9]/g, "")
+                            updatePart(pIdx, { mock_questions_to_ask: v === "" ? 0 : Number(v) })
+                          }}
+                          className={inputClass}
+                        />
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {part.type === "part1_photos"
+                            ? "For Part 1.2 this means photo sets per attempt. 0 = use all sets."
+                            : "0 = use all questions (from pool) in paid mock attempts."}
+                        </p>
+                      </div>
                     </div>
+                    {part.type === "part1_photos" && (
+                      <div className="rounded-lg bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">
+                        Part 1.2 Photo Set Mode: each question here should be one full set
+                        (description + linked follow-ups in sub-questions + one photo image).
+                      </div>
+                    )}
 
-                    {/* ── Part-level images (for Part 1.2 and Part 2) ── */}
+                    {/* ── Part-level images (currently unused for Part 2; images are per-question) ── */}
                     {showImages && (
-                      <div tabIndex={0} onPaste={(e) => handleImagePaste(pIdx, e)} className="outline-none">
+                      <div
+                        tabIndex={0}
+                        onPaste={(e) => handleImagePaste(pIdx, e)}
+                        className="rounded-xl border-2 border-dashed border-border p-3 outline-none focus:ring-2 focus:ring-primary/20"
+                      >
                         <div className="flex items-center justify-between mb-2">
                           <label className={labelClass}>
                             <ImageIcon className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
@@ -1005,6 +1222,11 @@ function ExamForm({
                             </p>
                           </div>
                         )}
+                        {part.images.length > 0 && (
+                          <p className="mt-2 text-[10px] text-muted-foreground">
+                            Tip: paste (Ctrl+V / ⌘V) to add more images quickly.
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -1052,7 +1274,7 @@ function ExamForm({
                                       : part.type === "part2"
                                         ? "Optional – leave empty if using sub-questions only"
                                         : part.type === "part1_photos"
-                                          ? "e.g. Describe what you see in the picture."
+                                          ? "e.g. Describe what you see in the picture. (This becomes the photo description question)"
                                           : "e.g. Should school uniforms be mandatory?"
                                   }
                                 />
@@ -1086,12 +1308,140 @@ function ExamForm({
                               </div>
                             </div>
 
-                            {/* Sub-questions (Part 2 only) */}
+                            {/* Photo set image (Part 1.2 only, per set/question) */}
+                            {part.type === "part1_photos" && (
+                              <div
+                                className="pl-7 rounded-lg border-2 border-dashed border-border bg-muted/30 p-2 transition-colors hover:border-primary/50 hover:bg-muted/60"
+                                tabIndex={0}
+                                onPaste={(e) => handleQuestionImagePaste(pIdx, qIdx, e)}
+                                onDragOver={(e) => {
+                                  e.preventDefault()
+                                }}
+                                onDrop={(e) => handleQuestionImageDrop(pIdx, qIdx, e)}
+                              >
+                                <div className="mb-1 flex items-center justify-between">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Photo (this set)
+                                  </span>
+                                  <label className="cursor-pointer text-[10px] font-semibold text-primary hover:underline">
+                                    <Upload className="mr-1 inline h-3 w-3" />
+                                    Upload
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        await handleQuestionImageUpload(pIdx, qIdx, file)
+                                        e.target.value = ""
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {q.images && q.images.length > 0 ? (
+                                    <div className="group relative h-24 w-24 overflow-hidden rounded-xl border border-border bg-muted">
+                                      <img src={q.images[0]} alt="" className="h-full w-full object-cover" />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateQuestion(pIdx, qIdx, { images: [] })}
+                                        className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-white" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex h-24 w-24 items-center justify-center rounded-xl border border-dashed border-border bg-background text-[11px] text-muted-foreground">
+                                      1 photo
+                                    </div>
+                                  )}
+                                  <div className="flex-1 space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Add one photo for this set by upload, paste, or drag &amp; drop.
+                                    </p>
+                                    <p className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                                      <Clipboard className="h-3 w-3" />
+                                      Click here, then paste (Ctrl+V / ⌘V) a screenshot.
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground/70">
+                                      Or drag an image file from your desktop and drop it on this box.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Long-turn image (Part 2 only, per question/card) */}
                             {part.type === "part2" && (
+                              <div
+                                className="pl-7 rounded-lg border-2 border-dashed border-border bg-muted/30 p-2 transition-colors hover:border-primary/50 hover:bg-muted/60"
+                                tabIndex={0}
+                                onPaste={(e) => handleQuestionImagePaste(pIdx, qIdx, e)}
+                                onDragOver={(e) => {
+                                  e.preventDefault()
+                                }}
+                                onDrop={(e) => handleQuestionImageDrop(pIdx, qIdx, e)}
+                              >
+                                <div className="mb-1 flex items-center justify-between">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Image (this Part 2 card)
+                                  </span>
+                                  <label className="cursor-pointer text-[10px] font-semibold text-primary hover:underline">
+                                    <Upload className="mr-1 inline h-3 w-3" />
+                                    Upload
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        await handleQuestionImageUpload(pIdx, qIdx, file)
+                                        e.target.value = ""
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {q.images && q.images.length > 0 ? (
+                                    <div className="group relative h-24 w-24 overflow-hidden rounded-xl border border-border bg-muted">
+                                      <img src={q.images[0]} alt="" className="h-full w-full object-cover" />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateQuestion(pIdx, qIdx, { images: [] })}
+                                        className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-white" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex h-24 w-24 items-center justify-center rounded-xl border border-dashed border-border bg-background text-[11px] text-muted-foreground">
+                                      1 image
+                                    </div>
+                                  )}
+                                  <div className="flex-1 space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Add one image for this Part 2 card by upload, paste, or drag &amp; drop.
+                                    </p>
+                                    <p className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                                      <Clipboard className="h-3 w-3" />
+                                      Click here, then paste (Ctrl+V / ⌘V) a screenshot.
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground/70">
+                                      Or drag an image file from your desktop and drop it on this box.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Sub-questions (Part 2 only) */}
+                            {(part.type === "part2" || part.type === "part1_photos") && (
                               <div className="pl-7">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Sub-questions
+                                    {part.type === "part1_photos" ? "Follow-up Questions (5s/30s each)" : "Sub-questions"}
                                   </span>
                                   <button
                                     type="button"
@@ -1101,6 +1451,11 @@ function ExamForm({
                                     + Add
                                   </button>
                                 </div>
+                                {part.type === "part1_photos" && (
+                                  <p className="mb-1 text-[10px] text-muted-foreground">
+                                    These follow-ups stay linked to this photo set and are shown right after the description question.
+                                  </p>
+                                )}
                                 {q.sub_questions.map((sq, sIdx) => (
                                   <div key={sIdx} className="flex items-center gap-2 mb-1.5">
                                     <input

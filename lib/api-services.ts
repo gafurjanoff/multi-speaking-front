@@ -12,6 +12,11 @@ interface BackendExamCard {
   is_free: boolean
   is_mock: boolean
   is_published: boolean
+  free_attempt_limit: number
+  mock_attempt_limit: number
+  access_validity_days: number
+  shuffle_questions_for_mock: boolean
+  auto_ai_assessment: boolean
   total_parts: number
   questions_count: number
 }
@@ -26,6 +31,11 @@ function mapExamCard(b: BackendExamCard): ExamCard {
     isFree: b.is_free,
     isMock: b.is_mock,
     isPublished: b.is_published,
+    freeAttemptLimit: b.free_attempt_limit,
+    mockAttemptLimit: b.mock_attempt_limit,
+    accessValidityDays: b.access_validity_days,
+    shuffleQuestionsForMock: b.shuffle_questions_for_mock,
+    autoAiAssessment: b.auto_ai_assessment,
     questionsCount: b.questions_count,
   }
 }
@@ -46,6 +56,11 @@ export interface BackendExamDetail {
   level: string
   is_free?: boolean
   is_mock?: boolean
+  free_attempt_limit?: number
+  mock_attempt_limit?: number
+  access_validity_days?: number
+  shuffle_questions_for_mock?: boolean
+  auto_ai_assessment?: boolean
   parts?: {
     id: string
     type: string
@@ -56,6 +71,7 @@ export interface BackendExamDetail {
     images: string[] | null
     prep_time: number
     answer_time: number
+    mock_questions_to_ask?: number
     questions: {
       id: string
       text: string
@@ -73,6 +89,11 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
     level: b.level,
     isFree: b.is_free,
     isMock: b.is_mock,
+    freeAttemptLimit: b.free_attempt_limit,
+    mockAttemptLimit: b.mock_attempt_limit,
+    accessValidityDays: b.access_validity_days,
+    shuffleQuestionsForMock: b.shuffle_questions_for_mock,
+    autoAiAssessment: b.auto_ai_assessment,
     parts: (b.parts ?? []).map((p) => ({
       id: p.id,
       type: p.type as Exam["parts"][number]["type"],
@@ -83,6 +104,7 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
       images: p.images,
       prepTime: p.prep_time,
       answerTime: p.answer_time,
+      mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
       questions: (p.questions ?? []).map((q) => ({
         id: q.id,
         text: q.text,
@@ -119,7 +141,16 @@ export async function startSession(examId: string): Promise<SessionResponse | nu
     method: "POST",
     body: JSON.stringify({ exam_id: examId }),
   })
-  if (!res.ok) return null
+  if (!res.ok) {
+    let detail = ""
+    try {
+      const data = await res.json()
+      detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data?.detail ?? data)
+    } catch {
+      detail = await res.text()
+    }
+    throw new Error(`START_SESSION_FAILED:${res.status}:${detail}`)
+  }
   return res.json()
 }
 
@@ -142,6 +173,8 @@ export async function uploadRecording(
   sessionId: string,
   partId: string,
   questionId: string,
+  partType: string,
+  questionText: string,
   partOrder: number,
   questionOrder: number,
   blob: Blob,
@@ -176,6 +209,8 @@ export async function uploadRecording(
       const form = new FormData()
       form.append("part_id", partId)
       form.append("question_id", questionId)
+      form.append("part_type", partType)
+      form.append("question_text", questionText)
       form.append("part_order", String(partOrder))
       form.append("question_order", String(questionOrder))
       form.append("duration", String(duration))
@@ -308,6 +343,8 @@ export async function fetchProfile(): Promise<AdminUser | null> {
 
 export interface AdminSettings {
   ai_scoring_profile: "strict" | "normal" | "lenient"
+  free_exam_upsell_text: string
+  free_exam_telegram_upsell_text: string
 }
 
 export async function adminFetchSettings(): Promise<AdminSettings | null> {
@@ -316,12 +353,26 @@ export async function adminFetchSettings(): Promise<AdminSettings | null> {
   return res.json()
 }
 
-export async function adminUpdateSettings(body: AdminSettings): Promise<boolean> {
+export async function adminUpdateSettings(body: Partial<AdminSettings>): Promise<boolean> {
   const res = await fetchWithAuth("/api/admin/settings", {
     method: "PATCH",
     body: JSON.stringify(body),
   })
   return res.ok
+}
+
+export interface ContactInfo {
+  telegram: string
+  phone: string
+  message: string
+  bot_username: string
+  upsell_text?: string
+}
+
+export async function fetchContactInfo(): Promise<ContactInfo | null> {
+  const res = await fetch(getApiUrl("/api/exams/contact-info"))
+  if (!res.ok) return null
+  return res.json()
 }
 
 // ── Profile photo ──

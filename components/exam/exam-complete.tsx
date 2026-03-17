@@ -52,6 +52,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
             sessionId!,
             rec.partId,
             rec.questionId,
+            rec.partType,
+            rec.questionText,
             rec.partOrder,
             rec.questionOrder,
             rec.blob,
@@ -84,6 +86,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
               sessionId!,
               rec.partId,
               rec.questionId,
+              rec.partType,
+              rec.questionText,
               rec.partOrder,
               rec.questionOrder,
               rec.blob,
@@ -178,7 +182,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
         </div>
         <h1 className="mb-2 text-3xl font-bold text-foreground">Exam Completed</h1>
         <p className="text-base text-muted-foreground">
-          You have completed all parts of the {exam.title}. Your recordings are being submitted for review.
+          You have completed all parts of the {exam.title}. Your recordings are submitted and AI processing starts automatically.
+          Results may take a few minutes during busy times.
         </p>
       </div>
 
@@ -202,7 +207,7 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
           <CheckCircle2 className="h-5 w-5 text-green-600" />
           <p className="text-sm font-medium text-green-700 dark:text-green-400">
-            All recordings uploaded successfully! Your exam is now pending review.
+            All recordings uploaded successfully! AI assessment is processing in background — we will send your result shortly.
           </p>
         </div>
       )}

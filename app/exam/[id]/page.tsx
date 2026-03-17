@@ -20,6 +20,7 @@ export default function ExamByIdPage() {
   const [started, setStarted] = useState(false)
   const [paymentRequired, setPaymentRequired] = useState(false)
   const [examMeta, setExamMeta] = useState<{ title: string; level: string } | null>(null)
+  const [blockedMessage, setBlockedMessage] = useState("")
 
   const examId = params?.id as string
 
@@ -49,10 +50,22 @@ export default function ExamByIdPage() {
         if (accessRes.ok) {
           const accessData = await accessRes.json()
           if (!accessData.has_access) {
-            setExamMeta({ title: "Paid Exam", level: "" })
-            setPaymentRequired(true)
-            setLoading(false)
-            return
+            if (accessData.reason === "not_approved") {
+              setExamMeta({ title: "Paid Exam", level: "" })
+              setPaymentRequired(true)
+              setLoading(false)
+              return
+            }
+            if (accessData.reason === "attempt_limit_reached") {
+              setBlockedMessage("Attempt limit reached for this exam.")
+              setLoading(false)
+              return
+            }
+            if (accessData.reason === "access_expired") {
+              setBlockedMessage("Your access period for this paid exam has expired.")
+              setLoading(false)
+              return
+            }
           }
         }
       } catch {
@@ -83,6 +96,23 @@ export default function ExamByIdPage() {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="rounded-xl border border-border bg-card px-8 py-6 text-center">
           <p className="mb-4 text-lg font-semibold text-foreground">{error}</p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ backgroundColor: "hsl(var(--exam-primary))" }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (blockedMessage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="rounded-xl border border-border bg-card px-8 py-6 text-center">
+          <p className="mb-4 text-lg font-semibold text-foreground">{blockedMessage}</p>
           <button
             onClick={() => router.push("/dashboard")}
             className="rounded-lg px-4 py-2 text-sm font-medium text-white"

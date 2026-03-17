@@ -47,6 +47,7 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const [transitionPartName, setTransitionPartName] = useState("")
   const [animateContent, setAnimateContent] = useState(true)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string>("")
 
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const totalTimeRef = useRef(0)
@@ -91,10 +92,36 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
   // Start session on mount
   useEffect(() => {
-    startSession(exam.id).then((session) => {
-      if (session) setSessionId(session.id)
-    })
+    startSession(exam.id)
+      .then((session) => {
+        if (session) setSessionId(session.id)
+      })
+      .catch((err) => {
+        const msg = String(err?.message || "")
+        if (msg.includes("attempt_limit_reached")) {
+          setSessionError("Attempt limit reached for this exam.")
+        } else if (msg.includes("access_expired")) {
+          setSessionError("Your paid exam access period has expired.")
+        } else if (msg.includes("payment_required")) {
+          setSessionError("Payment/approval is required before starting this exam.")
+        } else {
+          setSessionError("Could not start exam session. Please refresh and try again.")
+        }
+      })
   }, [exam.id])
+
+  if (sessionError) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-2xl items-center justify-center px-4">
+        <div className="w-full rounded-2xl border border-border bg-card p-6 text-center">
+          <p className="text-lg font-semibold text-foreground">{sessionError}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Go back to dashboard, then open exam access or choose another exam.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const getAudioCtx = useCallback(() => {
     if (!audioCtxRef.current) {
@@ -231,6 +258,8 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         {
           partId,
           questionId,
+          partType: currentPart.type,
+          questionText: currentQuestion.text,
           partOrder,
           questionOrder,
           blob,
@@ -247,6 +276,8 @@ export function ExamEngine({ exam }: ExamEngineProps) {
             sessionId,
             partId,
             questionId,
+            currentPart.type,
+            currentQuestion.text,
             partOrder,
             questionOrder,
             blob,

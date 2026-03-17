@@ -23,6 +23,7 @@ export interface ExamPart {
   images?: string[] | null
   prepTime: number // seconds
   answerTime: number // seconds
+  mockQuestionsToAsk?: number
   questions: ExamQuestion[]
 }
 
@@ -32,12 +33,19 @@ export interface Exam {
   level: string
   isFree?: boolean
   isMock?: boolean
+  freeAttemptLimit?: number
+  mockAttemptLimit?: number
+  accessValidityDays?: number
+  shuffleQuestionsForMock?: boolean
+  autoAiAssessment?: boolean
   parts: ExamPart[]
 }
 
 export interface RecordingSegment {
   partId: string
   questionId: string
+  partType: ExamPartType
+  questionText: string
   partOrder: number
   questionOrder: number
   blob: Blob

@@ -30,13 +30,19 @@ const profiles = [
 
 export default function AdminSettingsPage() {
   const [current, setCurrent] = useState<"strict" | "normal" | "lenient">("strict")
+  const [freeUpsellText, setFreeUpsellText] = useState("")
+  const [freeTelegramUpsellText, setFreeTelegramUpsellText] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     adminFetchSettings().then((s) => {
-      if (s) setCurrent(s.ai_scoring_profile)
+      if (s) {
+        setCurrent(s.ai_scoring_profile)
+        setFreeUpsellText(s.free_exam_upsell_text ?? "")
+        setFreeTelegramUpsellText(s.free_exam_telegram_upsell_text ?? "")
+      }
       setLoading(false)
     })
   }, [])
@@ -48,6 +54,21 @@ export default function AdminSettingsPage() {
     const ok = await adminUpdateSettings({ ai_scoring_profile: profile })
     if (ok) {
       setCurrent(profile)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+    setSaving(false)
+  }
+
+  const handleSaveUpsell = async () => {
+    if (saving) return
+    setSaving(true)
+    setSaved(false)
+    const ok = await adminUpdateSettings({
+      free_exam_upsell_text: freeUpsellText,
+      free_exam_telegram_upsell_text: freeTelegramUpsellText,
+    })
+    if (ok) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
@@ -117,6 +138,45 @@ export default function AdminSettingsPage() {
             Scoring profile updated successfully.
           </div>
         )}
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+        <h2 className="mb-1 text-base font-semibold text-foreground">Free Exam Upsell Copy</h2>
+        <p className="mb-5 text-sm text-muted-foreground">
+          This text is shown to free-test users in web feedback and Telegram messages.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Web Upsell Text
+            </label>
+            <textarea
+              value={freeUpsellText}
+              onChange={(e) => setFreeUpsellText(e.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Telegram Upsell Text
+            </label>
+            <textarea
+              value={freeTelegramUpsellText}
+              onChange={(e) => setFreeTelegramUpsellText(e.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <button
+            onClick={handleSaveUpsell}
+            disabled={saving}
+            className="rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: "hsl(var(--exam-primary, 174 42% 51%))" }}
+          >
+            {saving ? "Saving..." : "Save Upsell Text"}
+          </button>
+        </div>
       </div>
     </div>
   )

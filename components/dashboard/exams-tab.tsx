@@ -3,15 +3,27 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import type { ExamResult } from "@/lib/api-types"
+import type { ExamCard } from "@/lib/api-types"
 
 interface ExamsTabProps {
   results: ExamResult[]
+  examCards: ExamCard[]
+  upsellText?: string
 }
 
-export function ExamsTab({ results }: ExamsTabProps) {
+export function ExamsTab({ results, examCards, upsellText }: ExamsTabProps) {
+  const freeCompleted = results.some((r) => {
+    const exam = examCards.find((e) => e.id === r.examId)
+    return Boolean(exam?.isFree && r.score !== undefined)
+  })
   return (
     <section className="space-y-4">
       <h2 className="text-lg font-bold text-foreground">Your exams</h2>
+      {freeCompleted && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+          {upsellText || "Completed free tests unlock basic feedback only. Upgrade to paid mock exams for detailed AI analysis and more realistic repeated practice."}
+        </div>
+      )}
       {results.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No exams taken yet. Start your first exam from the overview tab.
@@ -47,7 +59,7 @@ export function ExamsTab({ results }: ExamsTabProps) {
                   <span className="text-center text-foreground">
                     {score75 !== null
                       ? `${score75}/75`
-                      : r.status === "pending_review"
+                      : r.status === "pending_review" || r.status === "processing_ai"
                         ? "Pending"
                         : "\u2014"}
                   </span>
@@ -99,7 +111,7 @@ export function ExamsTab({ results }: ExamsTabProps) {
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-bold text-foreground">
-                      {score75 !== null ? `${score75}/75` : r.status === "pending_review" ? "Pending" : "\u2014"}
+                      {score75 !== null ? `${score75}/75` : (r.status === "pending_review" || r.status === "processing_ai") ? "Pending" : "\u2014"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
