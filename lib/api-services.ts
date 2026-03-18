@@ -103,46 +103,21 @@ type BackendQuestion = NonNullable<BackendPart["questions"]>[number]
 export function mapExamDetail(b: BackendExamDetail): Exam {
   const isFree = !!b.is_free
 
-  return {
-    id: b.id,
-    title: b.title,
-    level: b.level,
-    isFree: b.is_free,
-    isMock: b.is_mock,
-    freeAttemptLimit: b.free_attempt_limit,
-    mockAttemptLimit: b.mock_attempt_limit,
-    accessValidityDays: b.access_validity_days,
-    shuffleQuestionsForMock: b.shuffle_questions_for_mock,
-    autoAiAssessment: b.auto_ai_assessment,
-    parts: (b.parts ?? []).map((p: BackendPart) => {
-      // For FREE exams, make Part 1.2 behave like paid:
-      // - First card: photo + main question text
-      // - Then each sub-question as its own step (same photo)
-      let sourceQuestions: BackendQuestion[] = (p.questions ?? []) as BackendQuestion[]
-      if (isFree && p.type === "part1_photos") {
-        const expanded: BackendQuestion[] = []
-        for (const q of sourceQuestions) {
-          // Main photo description question without inline sub-questions
-          expanded.push({
-            ...q,
-            sub_questions: [],
-          })
-          if (q.sub_questions && q.sub_questions.length > 0) {
-            q.sub_questions.forEach((subText, idx) => {
-              expanded.push({
-                ...q,
-                id: `${q.id}__sub${idx}`,
-                text: subText,
-                // Follow-ups themselves have no further sub-questions
-                sub_questions: [],
-              })
-            })
-          }
-        }
-        sourceQuestions = expanded
-      }
+  const mappedParts: Exam["parts"] = []
 
-      return {
+  for (const p of (b.parts ?? []) as BackendPart[]) {
+    // Special handling: FREE exams Part 1.2 photo questions
+    if (isFree && p.type === "part1_photos") {
+      const originalQuestions: BackendQuestion[] = (p.questions ?? []) as BackendQuestion[]
+
+      // Part A: photo + main text, 10/45 (use backend times)
+      const photoQuestions: BackendQuestion[] = originalQuestions.map((q) => ({
+        ...q,
+        // hide inline sub-questions here; they will become separate follow-up questions
+        sub_questions: [],
+      }))
+
+      mappedParts.push({
         id: p.id,
         type: p.type as Exam["parts"][number]["type"],
         title: p.title,
@@ -153,7 +128,7 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
         prepTime: p.prep_time,
         answerTime: p.answer_time,
         mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
-        questions: sourceQuestions.map((q) => ({
+        questions: photoQuestions.map((q) => ({
           id: q.id,
           text: q.text,
           subQuestions: q.sub_questions,
@@ -165,8 +140,100 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
             pointText: fa.point_text,
           })),
         })),
+      })
+
+      // Part B: follow-up sub-questions, text-only, 5/30, grouped as part1
+      const followUpQuestions: {
+        id: string
+        text: string
+        assessment_group_type?: string | null
+        assessment_group_key?: string | null
+      }[] = []
+
+      for (const q of originalQuestions) {
+        if (q.sub_questions && q.sub_questions.length > 0) {
+          q.sub_questions.forEach((subText, idx) => {
+            followUpQuestions.push({
+              id: `${q.id}__sub${idx}`,
+              text: subText,
+              assessment_group_type: q.assessment_group_type,
+              assessment_group_key: q.assessment_group_key,
+            })
+          })
+        }
       }
-    }),
+
+      if (followUpQuestions.length > 0) {
+        mappedParts.push({
+          id: `${p.id}__followups`,
+          type: "part1",
+          title: "Part 1.2 – Photo Questions Follow-up",
+          // keep sequence by using the same part number; UI groups by type anyway
+          partNumber: p.part_number,
+          instruction: "",
+          instructionAudio: null,
+          images: null,
+          prepTime: 5,
+          answerTime: 30,
+          mockQuestionsToAsk: 0,
+          questions: followUpQuestions.map((fq) => ({
+            id: fq.id,
+            text: fq.text,
+            subQuestions: [],
+            // no images for follow-ups in free Part 1.2, keep undefined to match ExamQuestion type
+            images: undefined,
+            assessmentGroupType: fq.assessment_group_type ?? null,
+            assessmentGroupKey: fq.assessment_group_key ?? null,
+            // no for/against points here
+            forAgainst: undefined,
+          })),
+        })
+      }
+
+      continue
+    }
+
+    // Default mapping for all other parts (paid exams and non-photo parts)
+    const sourceQuestions: BackendQuestion[] = (p.questions ?? []) as BackendQuestion[]
+
+    mappedParts.push({
+      id: p.id,
+      type: p.type as Exam["parts"][number]["type"],
+      title: p.title,
+      partNumber: p.part_number,
+      instruction: p.instruction,
+      instructionAudio: p.instruction_audio,
+      images: p.images,
+      prepTime: p.prep_time,
+      answerTime: p.answer_time,
+      mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
+      questions: sourceQuestions.map((q) => ({
+        id: q.id,
+        text: q.text,
+        subQuestions: q.sub_questions,
+        images: q.images,
+        assessmentGroupType: q.assessment_group_type ?? null,
+        assessmentGroupKey: q.assessment_group_key ?? null,
+        forAgainst: q.for_against?.map((fa) => ({
+          side: fa.side as "for" | "against",
+          pointText: fa.point_text,
+        })),
+      })),
+    })
+  }
+
+  return {
+    id: b.id,
+    title: b.title,
+    level: b.level,
+    isFree: b.is_free,
+    isMock: b.is_mock,
+    freeAttemptLimit: b.free_attempt_limit,
+    mockAttemptLimit: b.mock_attempt_limit,
+    accessValidityDays: b.access_validity_days,
+    shuffleQuestionsForMock: b.shuffle_questions_for_mock,
+    autoAiAssessment: b.auto_ai_assessment,
+    parts: mappedParts,
   }
 }
 
