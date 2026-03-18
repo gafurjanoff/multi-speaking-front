@@ -1,13 +1,14 @@
 "use client"
 
-import type { ExamQuestion } from "@/lib/exam-types"
+import type { ExamQuestion, ExamPartType } from "@/lib/exam-types"
 
 interface QuestionCardProps {
   question: ExamQuestion
   partImages?: string[] | null
+  partType?: ExamPartType
 }
 
-export function QuestionCard({ question, partImages }: QuestionCardProps) {
+export function QuestionCard({ question, partImages, partType }: QuestionCardProps) {
   const images = partImages && partImages.length > 0 ? partImages : question.images
 
   return (
@@ -36,7 +37,9 @@ export function QuestionCard({ question, partImages }: QuestionCardProps) {
       )}
 
       {/* Sub-questions */}
-      {question.subQuestions && question.subQuestions.length > 0 && (
+      {question.subQuestions &&
+        question.subQuestions.length > 0 &&
+        partType !== "part1_photos" && (
         <div className={`rounded-xl bg-muted/40 p-4 md:p-5 ${question.text && question.text.trim() !== "" ? "mt-3" : ""}`}>
           <ul className="space-y-3">
             {question.subQuestions.map((sub, index) => (

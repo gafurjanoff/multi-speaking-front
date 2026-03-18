@@ -46,18 +46,6 @@ export default function ExamByIdPage() {
         const data = await fetchExamDetail(examId)
         if (data) {
           setExam(data)
-          // Auto-resume if there's saved in-progress state for this exam.
-          try {
-            const raw = sessionStorage.getItem(`speakexam_progress_${examId}`)
-            if (raw) {
-              const p = JSON.parse(raw) as any
-              if (p && p.examId === examId && p.sessionId) {
-                setStarted(true)
-              }
-            }
-          } catch {
-            // ignore
-          }
           setLoading(false)
           return
         }
@@ -156,12 +144,8 @@ export default function ExamByIdPage() {
   if (!exam) return null
 
   if (!started) {
-    // Some Next/TS incremental caches can lag behind prop type updates during dev.
-    // Keep runtime correct while the type system catches up.
-    const Lobby = ExamLobby as unknown as (p: any) => any
-    return <Lobby exam={exam} attemptInfo={attemptInfo} onStart={() => setStarted(true)} />
+    return <ExamLobby exam={exam} attemptInfo={attemptInfo} onStart={() => setStarted(true)} />
   }
 
-  const Engine = ExamEngine as unknown as (p: any) => any
-  return <Engine exam={exam} attemptInfo={attemptInfo} />
+  return <ExamEngine exam={exam} attemptInfo={attemptInfo} />
 }

@@ -682,7 +682,11 @@ export function ExamEngine({ exam, attemptInfo = null }: ExamEngineProps) {
               {currentPart.type === "part3" ? (
                 <ForAgainstCard question={currentQuestion} />
               ) : (
-                <QuestionCard question={currentQuestion} partImages={currentPart.images} />
+                <QuestionCard
+                  question={currentQuestion}
+                  partImages={currentPart.images}
+                  partType={currentPart.type}
+                />
               )}
             </div>
 
