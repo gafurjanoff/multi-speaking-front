@@ -66,28 +66,6 @@ export function ExamEngine({ exam, attemptInfo = null }: ExamEngineProps) {
 
   const currentPart = exam.parts[currentPartIndex]
   const currentQuestion = currentPart?.questions[currentQuestionIndex]
-  const progressKey = `speakexam_progress_${exam.id}`
-
-  // Persist progress so accidental reload/tab restore doesn't restart from Part 1.
-  useEffect(() => {
-    if (!sessionId) return
-    const payload = {
-      v: 1,
-      examId: exam.id,
-      sessionId,
-      currentPartIndex,
-      currentQuestionIndex,
-      phase,
-      // If the user refreshes mid-answer we can't continue recording; resume at prep.
-      safePhase: phase === "answer" ? "prep" : phase,
-      updatedAt: Date.now(),
-    }
-    try {
-      sessionStorage.setItem(progressKey, JSON.stringify(payload))
-    } catch {
-      // ignore
-    }
-  }, [sessionId, exam.id, currentPartIndex, currentQuestionIndex, phase, progressKey])
 
   // Prevent page reload / tab close during active exam
   useEffect(() => {
@@ -128,27 +106,6 @@ export function ExamEngine({ exam, attemptInfo = null }: ExamEngineProps) {
       .then((session) => {
         if (session) {
           setSessionId(session.id)
-          // Restore progress if it matches this session/exam.
-          try {
-            const raw = sessionStorage.getItem(`speakexam_progress_${exam.id}`)
-            if (raw) {
-              const p = JSON.parse(raw) as any
-              if (p && p.sessionId === session.id) {
-                const pi = Number.isFinite(p.currentPartIndex) ? Number(p.currentPartIndex) : 0
-                const qi = Number.isFinite(p.currentQuestionIndex) ? Number(p.currentQuestionIndex) : 0
-                setCurrentPartIndex(Math.max(0, Math.min(pi, exam.parts.length - 1)))
-                const part = exam.parts[Math.max(0, Math.min(pi, exam.parts.length - 1))]
-                const maxQ = (part?.questions?.length ?? 1) - 1
-                setCurrentQuestionIndex(Math.max(0, Math.min(qi, Math.max(0, maxQ))))
-                const safePhase = p.safePhase === "prep" || p.safePhase === "intro" || p.safePhase === "complete"
-                  ? p.safePhase
-                  : "prep"
-                setPhase(safePhase)
-              }
-            }
-          } catch {
-            // ignore
-          }
         }
       })
       .catch((err) => {
@@ -686,6 +643,7 @@ export function ExamEngine({ exam, attemptInfo = null }: ExamEngineProps) {
                   question={currentQuestion}
                   partImages={currentPart.images}
                   partType={currentPart.type}
+                  isFreeExam={!!exam.isFree}
                 />
               )}
             </div>

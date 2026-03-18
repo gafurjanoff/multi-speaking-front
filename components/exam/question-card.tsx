@@ -6,10 +6,14 @@ interface QuestionCardProps {
   question: ExamQuestion
   partImages?: string[] | null
   partType?: ExamPartType
+  /** Free exams can show Part 1.2 sub-questions together; paid mocks hide them. */
+  isFreeExam?: boolean
 }
 
-export function QuestionCard({ question, partImages, partType }: QuestionCardProps) {
+export function QuestionCard({ question, partImages, partType, isFreeExam = false }: QuestionCardProps) {
   const images = partImages && partImages.length > 0 ? partImages : question.images
+  const hideSubQuestionsForPhoto =
+    partType === "part1_photos" && !isFreeExam
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 md:p-6 shadow-sm">
@@ -39,7 +43,7 @@ export function QuestionCard({ question, partImages, partType }: QuestionCardPro
       {/* Sub-questions */}
       {question.subQuestions &&
         question.subQuestions.length > 0 &&
-        partType !== "part1_photos" && (
+        !hideSubQuestionsForPhoto && (
         <div className={`rounded-xl bg-muted/40 p-4 md:p-5 ${question.text && question.text.trim() !== "" ? "mt-3" : ""}`}>
           <ul className="space-y-3">
             {question.subQuestions.map((sub, index) => (
