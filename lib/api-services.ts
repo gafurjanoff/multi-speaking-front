@@ -128,13 +128,15 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
         prepTime: p.prep_time,
         answerTime: p.answer_time,
         mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
-        questions: photoQuestions.map((q) => ({
+          questions: photoQuestions.map((q) => ({
           id: q.id,
           text: q.text,
           subQuestions: q.sub_questions,
           images: q.images,
-          assessmentGroupType: q.assessment_group_type ?? null,
-          assessmentGroupKey: q.assessment_group_key ?? null,
+          // Free exams may send null group metadata for Part 1.2. Ensure
+          // photo-main + follow-ups share the same group for correct results.
+          assessmentGroupType: q.assessment_group_type ?? "part1_photos",
+          assessmentGroupKey: q.assessment_group_key ?? q.id,
           forAgainst: q.for_against?.map((fa) => ({
             side: fa.side as "for" | "against",
             pointText: fa.point_text,
@@ -156,8 +158,9 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
             followUpQuestions.push({
               id: `${q.id}__sub${idx}`,
               text: subText,
-              assessment_group_type: q.assessment_group_type,
-              assessment_group_key: q.assessment_group_key,
+              assessment_group_type: q.assessment_group_type ?? "part1_photos",
+              // Use the photo-main question id as a stable key when backend sends null.
+              assessment_group_key: q.assessment_group_key ?? q.id,
             })
           })
         }
