@@ -97,7 +97,12 @@ export interface BackendExamDetail {
   }[]
 }
 
+type BackendPart = NonNullable<BackendExamDetail["parts"]>[number]
+type BackendQuestion = NonNullable<BackendPart["questions"]>[number]
+
 export function mapExamDetail(b: BackendExamDetail): Exam {
+  const isFree = !!b.is_free
+
   return {
     id: b.id,
     title: b.title,
@@ -109,30 +114,59 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
     accessValidityDays: b.access_validity_days,
     shuffleQuestionsForMock: b.shuffle_questions_for_mock,
     autoAiAssessment: b.auto_ai_assessment,
-    parts: (b.parts ?? []).map((p) => ({
-      id: p.id,
-      type: p.type as Exam["parts"][number]["type"],
-      title: p.title,
-      partNumber: p.part_number,
-      instruction: p.instruction,
-      instructionAudio: p.instruction_audio,
-      images: p.images,
-      prepTime: p.prep_time,
-      answerTime: p.answer_time,
-      mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
-      questions: (p.questions ?? []).map((q) => ({
-        id: q.id,
-        text: q.text,
-        subQuestions: q.sub_questions,
-        images: q.images,
-        assessmentGroupType: q.assessment_group_type ?? null,
-        assessmentGroupKey: q.assessment_group_key ?? null,
-        forAgainst: q.for_against?.map((fa) => ({
-          side: fa.side as "for" | "against",
-          pointText: fa.point_text,
+    parts: (b.parts ?? []).map((p: BackendPart) => {
+      // For FREE exams, make Part 1.2 behave like paid:
+      // - First card: photo + main question text
+      // - Then each sub-question as its own step (same photo)
+      let sourceQuestions: BackendQuestion[] = (p.questions ?? []) as BackendQuestion[]
+      if (isFree && p.type === "part1_photos") {
+        const expanded: BackendQuestion[] = []
+        for (const q of sourceQuestions) {
+          // Main photo description question without inline sub-questions
+          expanded.push({
+            ...q,
+            sub_questions: [],
+          })
+          if (q.sub_questions && q.sub_questions.length > 0) {
+            q.sub_questions.forEach((subText, idx) => {
+              expanded.push({
+                ...q,
+                id: `${q.id}__sub${idx}`,
+                text: subText,
+                // Follow-ups themselves have no further sub-questions
+                sub_questions: [],
+              })
+            })
+          }
+        }
+        sourceQuestions = expanded
+      }
+
+      return {
+        id: p.id,
+        type: p.type as Exam["parts"][number]["type"],
+        title: p.title,
+        partNumber: p.part_number,
+        instruction: p.instruction,
+        instructionAudio: p.instruction_audio,
+        images: p.images,
+        prepTime: p.prep_time,
+        answerTime: p.answer_time,
+        mockQuestionsToAsk: p.mock_questions_to_ask ?? 0,
+        questions: sourceQuestions.map((q) => ({
+          id: q.id,
+          text: q.text,
+          subQuestions: q.sub_questions,
+          images: q.images,
+          assessmentGroupType: q.assessment_group_type ?? null,
+          assessmentGroupKey: q.assessment_group_key ?? null,
+          forAgainst: q.for_against?.map((fa) => ({
+            side: fa.side as "for" | "against",
+            pointText: fa.point_text,
+          })),
         })),
-      })),
-    })),
+      }
+    }),
   }
 }
 
