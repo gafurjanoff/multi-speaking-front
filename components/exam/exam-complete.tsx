@@ -5,7 +5,7 @@ import Link from "next/link"
 import type { Exam, RecordingSegment } from "@/lib/exam-types"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, Download, Play, Pause, Home, Loader2, AlertCircle } from "lucide-react"
-import { uploadRecording, submitSession } from "@/lib/api-services"
+import { fetchContactInfo, uploadRecording, submitSession } from "@/lib/api-services"
 
 interface ExamCompleteProps {
   recordings: RecordingSegment[]
@@ -26,9 +26,15 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
   const [uploadProgress, setUploadProgress] = useState(0)
   const startedUpload = useRef(false)
   const [retryTick, setRetryTick] = useState(0)
+  const [contact, setContact] = useState<{ telegram: string; phone: string; message: string; bot_username: string; upsell_text?: string } | null>(null)
 
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({})
+
+  useEffect(() => {
+    if (!exam.isFree) return
+    fetchContactInfo().then((c) => setContact(c))
+  }, [exam.isFree])
 
   useEffect(() => {
     if (!sessionId || startedUpload.current) return
@@ -53,6 +59,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
             rec.partId,
             rec.questionId,
             rec.partType,
+            rec.assessmentGroupType,
+            rec.assessmentGroupKey,
             rec.questionText,
             rec.partOrder,
             rec.questionOrder,
@@ -87,6 +95,8 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
               rec.partId,
               rec.questionId,
               rec.partType,
+              rec.assessmentGroupType,
+              rec.assessmentGroupKey,
               rec.questionText,
               rec.partOrder,
               rec.questionOrder,
@@ -115,6 +125,11 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
         if (!submitOk) {
           setUploadError(prev => prev || "Failed to submit exam. Please retry in a moment.")
           startedUpload.current = false
+        } else {
+          // Clear any saved in-progress state so next time starts fresh.
+          try {
+            sessionStorage.removeItem(`speakexam_progress_${exam.id}`)
+          } catch {}
         }
       } else {
         setUploadError(`Failed to upload ${failedIndices.length} recording(s). Please stay on this page and retry.`)
@@ -226,6 +241,29 @@ export function ExamComplete({ recordings, exam, sessionId }: ExamCompleteProps)
                 Retry Upload
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {exam.isFree && (
+        <div className="mb-8 rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Next step</p>
+          <h2 className="mt-1 text-lg font-bold text-foreground">Unlock paid mock exams</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {contact?.upsell_text?.trim()
+              ? contact.upsell_text
+              : "Get detailed AI feedback, shuffled questions on each attempt, and realistic mock exam conditions."}
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              {contact?.telegram && <span>Telegram: <span className="font-semibold text-foreground">{contact.telegram}</span></span>}
+              {contact?.phone && <span className="ml-3">Phone: <span className="font-semibold text-foreground">{contact.phone}</span></span>}
+            </div>
+            <Link href="/dashboard">
+              <Button className="rounded-xl text-white" style={{ backgroundColor: "hsl(var(--exam-primary))" }}>
+                View paid exams
+              </Button>
+            </Link>
           </div>
         </div>
       )}

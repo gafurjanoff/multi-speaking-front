@@ -6,15 +6,24 @@ import { Mic, Monitor, AlertTriangle, CheckCircle2, Clock, Volume2, Shield, Lock
 
 interface ExamLobbyProps {
   exam: Exam
+  attemptInfo?: {
+    max_attempts: number
+    used_attempts: number
+    remaining_attempts: number
+    window_expires_at?: string | null
+  } | null
   onStart: () => void
 }
 
-export function ExamLobby({ exam, onStart }: ExamLobbyProps) {
+export function ExamLobby({ exam, attemptInfo = null, onStart }: ExamLobbyProps) {
   const [micGranted, setMicGranted] = useState(false)
   const [micError, setMicError] = useState("")
   const [checking, setChecking] = useState(true)
 
   const isMock = !exam.isFree
+  const attemptText = isMock && attemptInfo
+    ? `Attempt ${Math.min(attemptInfo.used_attempts + 1, attemptInfo.max_attempts)} of ${attemptInfo.max_attempts}`
+    : null
 
   useEffect(() => {
     navigator.mediaDevices
@@ -99,6 +108,11 @@ export function ExamLobby({ exam, onStart }: ExamLobbyProps) {
                   Your recordings will be assessed by AI and results sent to you.
                   Attempts available: {exam.mockAttemptLimit ?? 5} within {exam.accessValidityDays ?? 30} days after access approval.
                 </p>
+                {attemptText && (
+                  <p className="mt-2 text-xs font-semibold" style={{ color: "hsl(174, 42%, 51%)" }}>
+                    {attemptText}
+                  </p>
+                )}
               </div>
             </div>
           </div>

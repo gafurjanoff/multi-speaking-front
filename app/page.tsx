@@ -9,15 +9,17 @@ import { FeaturesSection } from "@/components/landing/features-section"
 import { ExamStructureSection } from "@/components/landing/exam-structure-section"
 import { CtaSection } from "@/components/landing/cta-section"
 import { SiteFooter } from "@/components/landing/site-footer"
-import { fetchExams } from "@/lib/api-services"
+import { fetchExams, fetchPublicLandingStats, type PublicLandingStats } from "@/lib/api-services"
 import type { ExamCard } from "@/lib/api-types"
 
 export default function HomePage() {
   const { user } = useAuth()
   const [exams, setExams] = useState<ExamCard[]>([])
+  const [stats, setStats] = useState<PublicLandingStats | null>(null)
 
   useEffect(() => {
     fetchExams().then((data) => setExams(data))
+    fetchPublicLandingStats().then((s) => setStats(s))
   }, [])
 
   const freeExams = exams.filter((e) => e.isFree)
@@ -25,7 +27,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
-      <HeroSection user={user} />
+      <HeroSection user={user} stats={stats} />
       <FreeExamsSection exams={freeExams} />
       <FeaturesSection />
       <ExamStructureSection firstExamId={exams[0]?.id} />

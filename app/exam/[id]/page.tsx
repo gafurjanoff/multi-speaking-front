@@ -10,6 +10,13 @@ import { fetchExamDetail } from "@/lib/api-services"
 import { fetchWithAuth } from "@/lib/api-client"
 import type { Exam } from "@/lib/exam-types"
 
+type AttemptInfo = {
+  max_attempts: number
+  used_attempts: number
+  remaining_attempts: number
+  window_expires_at?: string | null
+} | null
+
 export default function ExamByIdPage() {
   const params = useParams()
   const router = useRouter()
@@ -21,6 +28,7 @@ export default function ExamByIdPage() {
   const [paymentRequired, setPaymentRequired] = useState(false)
   const [examMeta, setExamMeta] = useState<{ title: string; level: string } | null>(null)
   const [blockedMessage, setBlockedMessage] = useState("")
+  const [attemptInfo, setAttemptInfo] = useState<AttemptInfo>(null)
 
   const examId = params?.id as string
 
@@ -38,6 +46,18 @@ export default function ExamByIdPage() {
         const data = await fetchExamDetail(examId)
         if (data) {
           setExam(data)
+          // Auto-resume if there's saved in-progress state for this exam.
+          try {
+            const raw = sessionStorage.getItem(`speakexam_progress_${examId}`)
+            if (raw) {
+              const p = JSON.parse(raw) as any
+              if (p && p.examId === examId && p.sessionId) {
+                setStarted(true)
+              }
+            }
+          } catch {
+            // ignore
+          }
           setLoading(false)
           return
         }
@@ -49,6 +69,14 @@ export default function ExamByIdPage() {
         const accessRes = await fetchWithAuth("/api/exams/" + examId + "/access")
         if (accessRes.ok) {
           const accessData = await accessRes.json()
+          if (typeof accessData?.max_attempts === "number") {
+            setAttemptInfo({
+              max_attempts: accessData.max_attempts,
+              used_attempts: accessData.used_attempts ?? 0,
+              remaining_attempts: accessData.remaining_attempts ?? 0,
+              window_expires_at: accessData.window_expires_at ?? null,
+            })
+          }
           if (!accessData.has_access) {
             if (accessData.reason === "not_approved") {
               setExamMeta({ title: "Paid Exam", level: "" })
@@ -128,8 +156,12 @@ export default function ExamByIdPage() {
   if (!exam) return null
 
   if (!started) {
-    return <ExamLobby exam={exam} onStart={() => setStarted(true)} />
+    // Some Next/TS incremental caches can lag behind prop type updates during dev.
+    // Keep runtime correct while the type system catches up.
+    const Lobby = ExamLobby as unknown as (p: any) => any
+    return <Lobby exam={exam} attemptInfo={attemptInfo} onStart={() => setStarted(true)} />
   }
 
-  return <ExamEngine exam={exam} />
+  const Engine = ExamEngine as unknown as (p: any) => any
+  return <Engine exam={exam} attemptInfo={attemptInfo} />
 }

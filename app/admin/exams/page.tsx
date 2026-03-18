@@ -457,7 +457,10 @@ function ExamForm({
   const [title, setTitle] = useState(exam?.title ?? "")
   const [level, setLevel] = useState(exam?.level ?? "B2")
   const [description, setDescription] = useState(exam?.description ?? "")
-  const [isFree, setIsFree] = useState(exam?.isFree ?? false)
+  const initialMode: "free" | "paid" =
+    exam?.isFree === true ? "free" : "paid"
+  const [examMode, setExamMode] = useState<"free" | "paid">(initialMode)
+  const [isFree, setIsFree] = useState(exam?.isFree ?? (initialMode === "free"))
   const [isMock, setIsMock] = useState(exam?.isMock ?? true)
   const [isPublished, setIsPublished] = useState(exam?.isPublished ?? false)
   const [freeAttemptLimit, setFreeAttemptLimit] = useState(exam?.freeAttemptLimit ?? 3)
@@ -468,6 +471,7 @@ function ExamForm({
   const [parts, setParts] = useState<PartDraft[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState("")
+  const [formInfo, setFormInfo] = useState("")
   const [expandedPart, setExpandedPart] = useState<number | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -483,10 +487,214 @@ function ExamForm({
         setAccessValidityDays(detail.access_validity_days ?? 30)
         setShuffleQuestionsForMock(detail.shuffle_questions_for_mock ?? true)
         setAutoAiAssessment(detail.auto_ai_assessment ?? true)
+        setExamMode(detail.is_free ? "free" : "paid")
+        setIsFree(detail.is_free)
+        setIsMock(detail.is_mock)
       }
       setLoadingDetail(false)
     })
   }, [exam])
+
+  // Keep flags consistent and remove confusion:
+  // - Free Practice: is_free=true, is_mock=false, no shuffle
+  // - Paid Mock: is_free=false, is_mock=true, shuffle default on
+  useEffect(() => {
+    if (examMode === "free") {
+      setIsFree(true)
+      setIsMock(false)
+      setShuffleQuestionsForMock(false)
+      setAutoAiAssessment(true)
+      if (!freeAttemptLimit || freeAttemptLimit < 1) setFreeAttemptLimit(3)
+    } else {
+      setIsFree(false)
+      setIsMock(true)
+      if (!mockAttemptLimit || mockAttemptLimit < 1) setMockAttemptLimit(5)
+      if (!accessValidityDays || accessValidityDays < 1) setAccessValidityDays(30)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examMode])
+
+  const buildFreeTemplateParts = (): PartDraft[] => {
+    // Fixed questions (no sampling) – students should see the same questions each time.
+    // The admin can still add more questions, but mock_questions_to_ask stays 0.
+    const p1: PartDraft = {
+      ...emptyPart(1),
+      type: "part1",
+      title: PART_DEFAULTS.part1.title!,
+      instruction: PART_DEFAULTS.part1.instruction!,
+      prep_time: PART_DEFAULTS.part1.prep_time!,
+      answer_time: PART_DEFAULTS.part1.answer_time!,
+      mock_questions_to_ask: 0,
+      questions: [emptyQuestion(), emptyQuestion(), emptyQuestion()],
+    }
+    const p12: PartDraft = {
+      ...emptyPart(2),
+      type: "part1_photos",
+      title: PART_DEFAULTS.part1_photos.title!,
+      instruction: PART_DEFAULTS.part1_photos.instruction!,
+      prep_time: PART_DEFAULTS.part1_photos.prep_time!,
+      answer_time: PART_DEFAULTS.part1_photos.answer_time!,
+      mock_questions_to_ask: 0,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "What do you see in this picture?",
+          sub_questions: ["", ""],
+          images: [],
+        },
+      ],
+    }
+    const p2: PartDraft = {
+      ...emptyPart(3),
+      type: "part2",
+      title: PART_DEFAULTS.part2.title!,
+      instruction: PART_DEFAULTS.part2.instruction!,
+      prep_time: PART_DEFAULTS.part2.prep_time!,
+      answer_time: PART_DEFAULTS.part2.answer_time!,
+      mock_questions_to_ask: 0,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "",
+          sub_questions: ["", "", ""],
+          images: [],
+        },
+      ],
+    }
+    const p3: PartDraft = {
+      ...emptyPart(4),
+      type: "part3",
+      title: PART_DEFAULTS.part3.title!,
+      instruction: PART_DEFAULTS.part3.instruction!,
+      prep_time: PART_DEFAULTS.part3.prep_time!,
+      answer_time: PART_DEFAULTS.part3.answer_time!,
+      mock_questions_to_ask: 0,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "",
+          for_against_points: [
+            { side: "for", point_text: "" },
+            { side: "for", point_text: "" },
+            { side: "against", point_text: "" },
+            { side: "against", point_text: "" },
+          ],
+        },
+      ],
+    }
+    return [p1, p12, p2, p3].map((p, i) => ({ ...p, part_number: i + 1 }))
+  }
+
+  const buildPaidTemplateParts = (): PartDraft[] => {
+    // Pool-based questions with sampling per attempt (mock_questions_to_ask):
+    // - Part 1: sample N from pool
+    // - Part 1.2 Photo sets: sample 1 set per attempt (each set has linked follow-ups)
+    // - Part 2: sample 1 card
+    // - Part 3: sample 1 topic
+    const p1: PartDraft = {
+      ...emptyPart(1),
+      type: "part1",
+      title: PART_DEFAULTS.part1.title!,
+      instruction: PART_DEFAULTS.part1.instruction!,
+      prep_time: PART_DEFAULTS.part1.prep_time!,
+      answer_time: PART_DEFAULTS.part1.answer_time!,
+      mock_questions_to_ask: 3,
+      questions: [emptyQuestion(), emptyQuestion(), emptyQuestion(), emptyQuestion(), emptyQuestion()],
+    }
+    const p12: PartDraft = {
+      ...emptyPart(2),
+      type: "part1_photos",
+      title: PART_DEFAULTS.part1_photos.title!,
+      instruction: PART_DEFAULTS.part1_photos.instruction!,
+      prep_time: PART_DEFAULTS.part1_photos.prep_time!,
+      answer_time: PART_DEFAULTS.part1_photos.answer_time!,
+      mock_questions_to_ask: 1,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "What do you see in this picture?",
+          sub_questions: ["", ""],
+          images: [],
+        },
+        {
+          ...emptyQuestion(),
+          text: "What do you see in this picture?",
+          sub_questions: ["", ""],
+          images: [],
+        },
+      ],
+    }
+    const p2: PartDraft = {
+      ...emptyPart(3),
+      type: "part2",
+      title: PART_DEFAULTS.part2.title!,
+      instruction: PART_DEFAULTS.part2.instruction!,
+      prep_time: PART_DEFAULTS.part2.prep_time!,
+      answer_time: PART_DEFAULTS.part2.answer_time!,
+      mock_questions_to_ask: 1,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "",
+          sub_questions: ["", "", ""],
+          images: [],
+        },
+        {
+          ...emptyQuestion(),
+          text: "",
+          sub_questions: ["", "", ""],
+          images: [],
+        },
+      ],
+    }
+    const p3: PartDraft = {
+      ...emptyPart(4),
+      type: "part3",
+      title: PART_DEFAULTS.part3.title!,
+      instruction: PART_DEFAULTS.part3.instruction!,
+      prep_time: PART_DEFAULTS.part3.prep_time!,
+      answer_time: PART_DEFAULTS.part3.answer_time!,
+      mock_questions_to_ask: 1,
+      questions: [
+        {
+          ...emptyQuestion(),
+          text: "",
+          for_against_points: [
+            { side: "for", point_text: "" },
+            { side: "for", point_text: "" },
+            { side: "against", point_text: "" },
+            { side: "against", point_text: "" },
+          ],
+        },
+        {
+          ...emptyQuestion(),
+          text: "",
+          for_against_points: [
+            { side: "for", point_text: "" },
+            { side: "for", point_text: "" },
+            { side: "against", point_text: "" },
+            { side: "against", point_text: "" },
+          ],
+        },
+      ],
+    }
+    return [p1, p12, p2, p3].map((p, i) => ({ ...p, part_number: i + 1 }))
+  }
+
+  const applyTemplate = (mode: "free" | "paid") => {
+    try {
+      setFormError("")
+      setFormInfo("")
+      setExamMode(mode)
+      const tpl = mode === "free" ? buildFreeTemplateParts() : buildPaidTemplateParts()
+      setParts(tpl)
+      setExpandedPart(0)
+      setFormInfo(mode === "free" ? "Free template applied." : "Paid template applied.")
+    } catch (e) {
+      console.error("Apply template failed:", e)
+      setFormError("Could not apply template. Please refresh and try again.")
+    }
+  }
 
   const validateExamConfig = (): string | null => {
     for (let pIdx = 0; pIdx < parts.length; pIdx++) {
@@ -521,6 +729,7 @@ function ExamForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError("")
+    setFormInfo("")
     const validationError = validateExamConfig()
     if (validationError) {
       setFormError(validationError)
@@ -808,6 +1017,11 @@ function ExamForm({
             {formError}
           </div>
         )}
+        {formInfo && !formError && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300">
+            {formInfo}
+          </div>
+        )}
         {/* ── Exam metadata ── */}
         <div className="rounded-2xl border border-border bg-card p-6">
           <h2 className="mb-5 text-xl font-bold text-foreground">
@@ -815,6 +1029,54 @@ function ExamForm({
           </h2>
 
           <div className="space-y-4">
+            {/* Exam mode switch (separate flows) */}
+            <div className="rounded-2xl border border-border bg-muted/20 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Exam type
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!exam) applyTemplate("free")
+                    else setExamMode("free")
+                  }}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    examMode === "free"
+                      ? "border-green-300 bg-green-50 dark:border-green-900/50 dark:bg-green-950/20"
+                      : "border-border bg-background hover:bg-muted/30"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">Free Practice Exam</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Fixed questions. Cheaper AI feedback. Great for onboarding.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!exam) applyTemplate("paid")
+                    else setExamMode("paid")
+                  }}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    examMode === "paid"
+                      ? "border-blue-300 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20"
+                      : "border-border bg-background hover:bg-muted/30"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">Paid Mock Exam</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Shuffled/sampled pools. Multiple attempts. Real exam conditions.
+                  </p>
+                </button>
+              </div>
+              {!exam && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Tip: click one of the two cards above to start with a ready template.
+                </p>
+              )}
+            </div>
+
             <div>
               <label className={labelClass}>Title</label>
               <input
@@ -840,8 +1102,6 @@ function ExamForm({
               </div>
               <div className="flex items-end gap-5">
                 {[
-                  { label: "Free", checked: isFree, set: setIsFree },
-                  { label: "Mock", checked: isMock, set: setIsMock },
                   { label: "Publish", checked: isPublished, set: setIsPublished },
                 ].map((c) => (
                   <label
@@ -861,46 +1121,60 @@ function ExamForm({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className={labelClass}>Free Attempt Limit</label>
+                <label className={labelClass}>Attempt Limit</label>
                 <input
                   type="number"
                   min={1}
-                  value={freeAttemptLimit}
-                  onChange={(e) => setFreeAttemptLimit(Number(e.target.value) || 1)}
+                  value={examMode === "free" ? freeAttemptLimit : mockAttemptLimit}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 1
+                    if (examMode === "free") setFreeAttemptLimit(v)
+                    else setMockAttemptLimit(v)
+                  }}
                   className={inputClass}
                 />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {examMode === "free" ? "Free practice attempts per user." : "Paid mock attempts (counted only after full submit)."}
+                </p>
               </div>
-              <div>
-                <label className={labelClass}>Paid Attempt Limit</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={mockAttemptLimit}
-                  onChange={(e) => setMockAttemptLimit(Number(e.target.value) || 1)}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Access Validity Days (Paid)</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={accessValidityDays}
-                  onChange={(e) => setAccessValidityDays(Number(e.target.value) || 1)}
-                  className={inputClass}
-                />
-              </div>
+              {examMode === "paid" ? (
+                <>
+                  <div>
+                    <label className={labelClass}>Access Validity Days</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={accessValidityDays}
+                      onChange={(e) => setAccessValidityDays(Number(e.target.value) || 1)}
+                      className={inputClass}
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Attempts reset after access window ends.
+                    </p>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={shuffleQuestionsForMock}
+                        onChange={(e) => setShuffleQuestionsForMock(e.target.checked)}
+                        className="h-4 w-4 rounded border-border"
+                      />
+                      Shuffle & sample questions per attempt
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="sm:col-span-2 flex items-end">
+                    <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground w-full">
+                      Free exams show a fixed set of questions (no shuffling).
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-5">
-              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={shuffleQuestionsForMock}
-                  onChange={(e) => setShuffleQuestionsForMock(e.target.checked)}
-                  className="h-4 w-4 rounded border-border"
-                />
-                Shuffle paid exam questions
-              </label>
               <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
                 <input
                   type="checkbox"
@@ -1132,27 +1406,35 @@ function ExamForm({
                           className={inputClass}
                         />
                       </div>
-                      <div>
-                        <label className={labelClass}>
-                          Paid Questions To Ask
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={part.mock_questions_to_ask}
-                          onChange={(e) => {
-                            const v = e.target.value.replace(/[^0-9]/g, "")
-                            updatePart(pIdx, { mock_questions_to_ask: v === "" ? 0 : Number(v) })
-                          }}
-                          className={inputClass}
-                        />
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {part.type === "part1_photos"
-                            ? "For Part 1.2 this means photo sets per attempt. 0 = use all sets."
-                            : "0 = use all questions (from pool) in paid mock attempts."}
-                        </p>
-                      </div>
+                      {examMode === "paid" ? (
+                        <div>
+                          <label className={labelClass}>
+                            Paid Questions To Ask
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={part.mock_questions_to_ask}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^0-9]/g, "")
+                              updatePart(pIdx, { mock_questions_to_ask: v === "" ? 0 : Number(v) })
+                            }}
+                            className={inputClass}
+                          />
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {part.type === "part1_photos"
+                              ? "For Part 1.2 this means photo sets per attempt. 0 = use all sets."
+                              : "0 = use all questions (from pool) in paid mock attempts."}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="sm:col-span-2">
+                          <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+                            Free mode uses fixed questions (no sampling).
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {part.type === "part1_photos" && (
                       <div className="rounded-lg bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">

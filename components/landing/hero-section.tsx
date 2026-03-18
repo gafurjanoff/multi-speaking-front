@@ -1,21 +1,28 @@
 "use client"
 
 import Link from "next/link"
-import { Headphones, ArrowRight, Users, BookOpen, GraduationCap } from "lucide-react"
+import { Headphones, ArrowRight, Users, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { User } from "@/lib/api-types"
 
-const stats = [
-  { value: "1,200+", label: "Students", icon: Users },
-  { value: "50+", label: "Exams", icon: BookOpen },
-  { value: "4.8/5", label: "Rating", icon: GraduationCap },
-]
-
 interface HeroSectionProps {
   user: User | null
+  stats?: { total_users: number; published_exams: number } | null
 }
 
-export function HeroSection({ user }: HeroSectionProps) {
+function formatCompact(n: number): string {
+  if (!Number.isFinite(n)) return "—"
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M+`
+  if (n >= 10_000) return `${Math.round(n / 1000)}k+`
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k+`
+  return String(n)
+}
+
+export function HeroSection({ user, stats = null }: HeroSectionProps) {
+  const heroStats = [
+    { value: stats ? formatCompact(stats.total_users) : "—", label: "Students", icon: Users },
+    { value: stats ? formatCompact(stats.published_exams) : "—", label: "Published exams", icon: BookOpen },
+  ]
   return (
     <section className="px-4 py-16 md:py-28">
       <div className="mx-auto max-w-3xl text-center">
@@ -84,8 +91,8 @@ export function HeroSection({ user }: HeroSectionProps) {
           )}
         </div>
 
-        <div className="mx-auto mt-12 flex max-w-sm items-center justify-center gap-8">
-          {stats.map((stat) => (
+        <div className="mx-auto mt-12 flex max-w-sm items-center justify-center gap-10">
+          {heroStats.map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="text-2xl font-bold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>

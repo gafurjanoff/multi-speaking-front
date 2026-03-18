@@ -10,6 +10,8 @@ export interface ExamQuestion {
   text: string
   subQuestions?: string[]
   images?: string[]
+  assessmentGroupType?: string | null
+  assessmentGroupKey?: string | null
   forAgainst?: ForAgainstPoint[]
 }
 
@@ -45,6 +47,8 @@ export interface RecordingSegment {
   partId: string
   questionId: string
   partType: ExamPartType
+  assessmentGroupType: string
+  assessmentGroupKey: string
   questionText: string
   partOrder: number
   questionOrder: number

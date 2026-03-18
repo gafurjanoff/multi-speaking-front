@@ -90,6 +90,10 @@ export function ResultRecordingsView({
   showScores = false,
   aiScores = {},
 }: ResultRecordingsViewProps) {
+  const recById = new Map<
+    string,
+    { file_path: string | null; duration: number; score?: number | null; feedback?: string | null }
+  >()
   const recByPartQuestion = new Map<
     string,
     { file_path: string | null; duration: number; score?: number | null; feedback?: string | null }
@@ -101,12 +105,14 @@ export function ResultRecordingsView({
   for (const r of recordings) {
     const key = `${String(r.part_id).trim().toLowerCase()}:${String(r.question_id).trim().toLowerCase()}`
     const ai = aiScores[r.id]
-    recByPartQuestion.set(key, {
+    const recData = {
       file_path: r.file_path,
       duration: r.duration,
       score: ai?.score ?? r.score,
       feedback: feedbackDisplay(ai?.feedback ?? r.feedback) ?? ai?.feedback ?? r.feedback ?? undefined,
-    })
+    }
+    recById.set(String(r.id), recData)
+    recByPartQuestion.set(key, recData)
     recIdByPartQuestion.set(key, r.id)
     const pid = String(r.part_id).trim().toLowerCase()
     if (pid !== prevPartId) {
@@ -192,10 +198,15 @@ export function ResultRecordingsView({
               const againstPoints = (q.for_against ?? []).filter((p) => p.side === "against")
               const hasForAgainst = forPoints.length > 0 || againstPoints.length > 0
 
+              const explicitRec = q.recording_id ? recById.get(q.recording_id) : undefined
+              const hasExplicitRecordingId = Boolean(q.recording_id)
+
               let fallbackRec = recByPartQuestion.get(
                 `${String(part.part_id).trim().toLowerCase()}:${String(q.question_id).trim().toLowerCase()}`
               )
-              if (!fallbackRec && partIdx < recsByPartOrder.length) {
+              // Safety: only fall back to positional mapping when the backend didn't give a recording_id.
+              // In shuffled/recording-driven layouts, positional fallback can silently attach wrong data.
+              if (!hasExplicitRecordingId && !fallbackRec && !explicitRec && partIdx < recsByPartOrder.length) {
                 const partRecs = recsByPartOrder[partIdx]
                 if (partRecs && qIdx < partRecs.length) {
                   const r = partRecs[qIdx]
@@ -211,19 +222,33 @@ export function ResultRecordingsView({
 
               // Find recording ID for AI data lookup
               const pqKey = `${String(part.part_id).trim().toLowerCase()}:${String(q.question_id).trim().toLowerCase()}`
-              let recId = recIdByPartQuestion.get(pqKey)
-              if (!recId && partIdx < recsByPartOrder.length) {
+              // IMPORTANT: Always prefer the explicit recording_id coming from the backend.
+              // For shuffled/mock attempts the displayed parts/questions can be "recording-driven"
+              // and do not match the original exam's part_id/question_id or index order.
+              let recId = q.recording_id || null
+              if (!recId) recId = recIdByPartQuestion.get(pqKey) || null
+              if (!recId && !hasExplicitRecordingId && partIdx < recsByPartOrder.length) {
                 const partRecs = recsByPartOrder[partIdx]
                 if (partRecs && qIdx < partRecs.length) recId = partRecs[qIdx].id
               }
-              if (!recId && q.recording_id) recId = q.recording_id
+              if (!recId && process.env.NODE_ENV !== "production") {
+                // This should be rare; when it happens, we prefer showing no AI data
+                // over accidentally attaching the wrong recording's transcript/score.
+                // eslint-disable-next-line no-console
+                console.warn("ResultRecordingsView: missing recording_id for question", {
+                  part_id: part.part_id,
+                  question_id: q.question_id,
+                  question_order: q.question_order,
+                })
+              }
               const aiData = recId ? aiScores[recId] : undefined
 
-              const filePath = q.file_path ?? fallbackRec?.file_path ?? null
-              const duration = q.duration || fallbackRec?.duration || 0
-              const fallbackScore = fallbackRec?.score ?? q.score
+              const filePath = q.file_path ?? explicitRec?.file_path ?? fallbackRec?.file_path ?? null
+              const duration = q.duration || explicitRec?.duration || fallbackRec?.duration || 0
+              const fallbackScore = explicitRec?.score ?? fallbackRec?.score ?? q.score
               const fallbackFeedback =
-                feedbackDisplay(fallbackRec?.feedback ?? q.feedback) ??
+                feedbackDisplay(explicitRec?.feedback ?? fallbackRec?.feedback ?? q.feedback) ??
+                explicitRec?.feedback ??
                 fallbackRec?.feedback ??
                 q.feedback
 

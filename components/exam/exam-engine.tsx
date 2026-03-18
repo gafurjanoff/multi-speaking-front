@@ -17,6 +17,12 @@ import { Mic, Clock, Volume2, AlertCircle } from "lucide-react"
 
 interface ExamEngineProps {
   exam: Exam
+  attemptInfo?: {
+    max_attempts: number
+    used_attempts: number
+    remaining_attempts: number
+    window_expires_at?: string | null
+  } | null
 }
 
 function getDisplayPart(partIndex: number, exam: Exam): number {
@@ -36,7 +42,7 @@ function getCompletedDisplayParts(currentPartIndex: number, exam: Exam): number[
   return Array.from(completed)
 }
 
-export function ExamEngine({ exam }: ExamEngineProps) {
+export function ExamEngine({ exam, attemptInfo = null }: ExamEngineProps) {
   const [currentPartIndex, setCurrentPartIndex] = useState(0)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [phase, setPhase] = useState<ExamPhase>("intro")
@@ -48,6 +54,10 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   const [animateContent, setAnimateContent] = useState(true)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionError, setSessionError] = useState<string>("")
+  const [uploadBlocked, setUploadBlocked] = useState(false)
+  const [uploadBlockedMsg, setUploadBlockedMsg] = useState("")
+  const [pendingUpload, setPendingUpload] = useState<RecordingSegment | null>(null)
+  const [retryingUpload, setRetryingUpload] = useState(false)
 
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const totalTimeRef = useRef(0)
@@ -56,6 +66,28 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
   const currentPart = exam.parts[currentPartIndex]
   const currentQuestion = currentPart?.questions[currentQuestionIndex]
+  const progressKey = `speakexam_progress_${exam.id}`
+
+  // Persist progress so accidental reload/tab restore doesn't restart from Part 1.
+  useEffect(() => {
+    if (!sessionId) return
+    const payload = {
+      v: 1,
+      examId: exam.id,
+      sessionId,
+      currentPartIndex,
+      currentQuestionIndex,
+      phase,
+      // If the user refreshes mid-answer we can't continue recording; resume at prep.
+      safePhase: phase === "answer" ? "prep" : phase,
+      updatedAt: Date.now(),
+    }
+    try {
+      sessionStorage.setItem(progressKey, JSON.stringify(payload))
+    } catch {
+      // ignore
+    }
+  }, [sessionId, exam.id, currentPartIndex, currentQuestionIndex, phase, progressKey])
 
   // Prevent page reload / tab close during active exam
   useEffect(() => {
@@ -94,7 +126,30 @@ export function ExamEngine({ exam }: ExamEngineProps) {
   useEffect(() => {
     startSession(exam.id)
       .then((session) => {
-        if (session) setSessionId(session.id)
+        if (session) {
+          setSessionId(session.id)
+          // Restore progress if it matches this session/exam.
+          try {
+            const raw = sessionStorage.getItem(`speakexam_progress_${exam.id}`)
+            if (raw) {
+              const p = JSON.parse(raw) as any
+              if (p && p.sessionId === session.id) {
+                const pi = Number.isFinite(p.currentPartIndex) ? Number(p.currentPartIndex) : 0
+                const qi = Number.isFinite(p.currentQuestionIndex) ? Number(p.currentQuestionIndex) : 0
+                setCurrentPartIndex(Math.max(0, Math.min(pi, exam.parts.length - 1)))
+                const part = exam.parts[Math.max(0, Math.min(pi, exam.parts.length - 1))]
+                const maxQ = (part?.questions?.length ?? 1) - 1
+                setCurrentQuestionIndex(Math.max(0, Math.min(qi, Math.max(0, maxQ))))
+                const safePhase = p.safePhase === "prep" || p.safePhase === "intro" || p.safePhase === "complete"
+                  ? p.safePhase
+                  : "prep"
+                setPhase(safePhase)
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       })
       .catch((err) => {
         const msg = String(err?.message || "")
@@ -234,6 +289,74 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     await startRecording()
   }, [currentPart, startRecording, playStartBeep, triggerAnimation])
 
+  const advanceAfterCurrentAnswer = useCallback(() => {
+    if (!currentPart || !currentQuestion) return
+
+    const hasMoreQuestions = currentQuestionIndex < currentPart.questions.length - 1
+    const hasMoreParts = currentPartIndex < exam.parts.length - 1
+
+    if (hasMoreQuestions) {
+      triggerAnimation()
+      setCurrentQuestionIndex(currentQuestionIndex + 1)
+      setPhase("prep")
+      const prepTime = currentPart.prepTime
+      totalTimeRef.current = prepTime
+      setTimeRemaining(prepTime)
+      setTimerKey((k) => k + 1)
+      isProcessingRef.current = false
+      return
+    }
+
+    if (hasMoreParts) {
+      const nextIdx = currentPartIndex + 1
+      const nextPart = exam.parts[nextIdx]
+      const currentDisplay = getDisplayPart(currentPartIndex, exam)
+      const nextDisplay = getDisplayPart(nextIdx, exam)
+
+      if (currentDisplay === nextDisplay) {
+        // Same display part (e.g. part1 → part1_photos) – skip transition
+        setCurrentPartIndex(nextIdx)
+        setCurrentQuestionIndex(0)
+        setPhase("prep")
+        const prepTime = nextPart!.prepTime
+        totalTimeRef.current = prepTime
+        setTimeRemaining(prepTime)
+        setTimerKey((k) => k + 1)
+        triggerAnimation()
+        isProcessingRef.current = false
+        return
+      }
+
+      const displayPartNames = ["Part 1", "Part 2", "Part 3"]
+      const completedPartName = displayPartNames[currentDisplay] || currentPart.title
+      playCompleteSound()
+      setTransitionPartName(completedPartName)
+      setShowTransition(true)
+
+      setTimeout(() => {
+        setShowTransition(false)
+        setCurrentPartIndex(nextIdx)
+        setCurrentQuestionIndex(0)
+        setPhase("intro")
+        triggerAnimation()
+        isProcessingRef.current = false
+      }, 2500)
+      return
+    }
+
+    playCompleteSound()
+    setPhase("complete")
+    isProcessingRef.current = false
+  }, [
+    currentPart,
+    currentQuestion,
+    currentQuestionIndex,
+    currentPartIndex,
+    exam.parts,
+    playCompleteSound,
+    triggerAnimation,
+  ])
+
   const handleAnswerComplete = useCallback(async () => {
     // Prevent double execution from React StrictMode or timer race conditions
     if (isProcessingRef.current) return
@@ -252,6 +375,9 @@ export function ExamEngine({ exam }: ExamEngineProps) {
       const partOrder = currentPartIndex
       const questionOrder = currentQuestionIndex
       const duration = currentPart.answerTime - timeRemaining
+      const assessmentGroupType =
+        currentQuestion.assessmentGroupType || currentPart.type
+      const assessmentGroupKey = currentQuestion.assessmentGroupKey || ""
 
       setRecordings((prev) => [
         ...prev,
@@ -259,6 +385,8 @@ export function ExamEngine({ exam }: ExamEngineProps) {
           partId,
           questionId,
           partType: currentPart.type,
+          assessmentGroupType,
+          assessmentGroupKey,
           questionText: currentQuestion.text,
           partOrder,
           questionOrder,
@@ -268,84 +396,57 @@ export function ExamEngine({ exam }: ExamEngineProps) {
         },
       ])
 
-      // Reliability: upload right away (not only on final screen).
-      // If user closes tab later, earlier answers are already persisted.
+      // Reliability: upload right away.
+      // If upload fails (e.g., internet is down), block progress and let user retry.
       if (sessionId) {
-        void (async () => {
-          const ok = await uploadRecording(
-            sessionId,
-            partId,
-            questionId,
-            currentPart.type,
-            currentQuestion.text,
-            partOrder,
-            questionOrder,
-            blob,
-            duration,
-          )
-          if (ok) {
-            setRecordings((prev) =>
-              prev.map((r) =>
-                r.partId === partId && r.questionId === questionId
-                  ? { ...r, uploaded: true }
-                  : r
-              )
+        const seg: RecordingSegment = {
+          partId,
+          questionId,
+          partType: currentPart.type,
+          assessmentGroupType,
+          assessmentGroupKey,
+          questionText: currentQuestion.text,
+          partOrder,
+          questionOrder,
+          blob,
+          duration,
+          uploaded: false,
+        }
+        const ok = await uploadRecording(
+          sessionId,
+          partId,
+          questionId,
+          currentPart.type,
+          assessmentGroupType,
+          assessmentGroupKey,
+          currentQuestion.text,
+          partOrder,
+          questionOrder,
+          blob,
+          duration,
+        )
+        if (ok) {
+          setRecordings((prev) =>
+            prev.map((r) =>
+              r.partId === partId && r.questionId === questionId
+                ? { ...r, uploaded: true }
+                : r
             )
-          }
-        })()
-      }
-    }
-
-    const hasMoreQuestions = currentQuestionIndex < currentPart.questions.length - 1
-    const hasMoreParts = currentPartIndex < exam.parts.length - 1
-
-    if (hasMoreQuestions) {
-      triggerAnimation()
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-      setPhase("prep")
-      const prepTime = currentPart.prepTime
-      totalTimeRef.current = prepTime
-      setTimeRemaining(prepTime)
-      setTimerKey((k) => k + 1)
-      isProcessingRef.current = false
-    } else if (hasMoreParts) {
-      const nextIdx = currentPartIndex + 1
-      const nextPart = exam.parts[nextIdx]
-      const currentDisplay = getDisplayPart(currentPartIndex, exam)
-      const nextDisplay = getDisplayPart(nextIdx, exam)
-
-      if (currentDisplay === nextDisplay) {
-        // Same display part (e.g. part1 → part1_photos) – skip transition
-        setCurrentPartIndex(nextIdx)
-        setCurrentQuestionIndex(0)
-        setPhase("prep")
-        const prepTime = nextPart!.prepTime
-        totalTimeRef.current = prepTime
-        setTimeRemaining(prepTime)
-        setTimerKey((k) => k + 1)
-        triggerAnimation()
-        isProcessingRef.current = false
-      } else {
-        const displayPartNames = ["Part 1", "Part 2", "Part 3"]
-        const completedPartName = displayPartNames[currentDisplay] || currentPart.title
-        playCompleteSound()
-        setTransitionPartName(completedPartName)
-        setShowTransition(true)
-
-        setTimeout(() => {
-          setShowTransition(false)
-          setCurrentPartIndex(nextIdx)
-          setCurrentQuestionIndex(0)
-          setPhase("intro")
-          triggerAnimation()
+          )
+        } else {
+          setPendingUpload(seg)
+          setUploadBlocked(true)
+          setUploadBlockedMsg(
+            navigator.onLine === false
+              ? "Internet connection is offline. We couldn't upload your recording."
+              : "Internet is unstable. We couldn't upload your recording."
+          )
           isProcessingRef.current = false
-        }, 2500)
+          return
+        }
       }
-    } else {
-      playCompleteSound()
-      setPhase("complete")
-      isProcessingRef.current = false
     }
+    advanceAfterCurrentAnswer()
   }, [
     currentPart,
     currentQuestion,
@@ -355,9 +456,51 @@ export function ExamEngine({ exam }: ExamEngineProps) {
     stopRecording,
     sessionId,
     timeRemaining,
-    playCompleteSound,
-    triggerAnimation,
+    advanceAfterCurrentAnswer,
   ])
+
+  const handleRetryUpload = useCallback(async () => {
+    if (!sessionId || !pendingUpload || retryingUpload) return
+    setRetryingUpload(true)
+    try {
+      const ok = await uploadRecording(
+        sessionId,
+        pendingUpload.partId,
+        pendingUpload.questionId,
+        pendingUpload.partType,
+        pendingUpload.assessmentGroupType,
+        pendingUpload.assessmentGroupKey,
+        pendingUpload.questionText,
+        pendingUpload.partOrder,
+        pendingUpload.questionOrder,
+        pendingUpload.blob,
+        pendingUpload.duration,
+        2
+      )
+      if (ok) {
+        setRecordings((prev) =>
+          prev.map((r) =>
+            r.partId === pendingUpload.partId && r.questionId === pendingUpload.questionId
+              ? { ...r, uploaded: true }
+              : r
+          )
+        )
+        setUploadBlocked(false)
+        setUploadBlockedMsg("")
+        setPendingUpload(null)
+        // Proceed to next question/part now that upload succeeded
+        advanceAfterCurrentAnswer()
+      } else {
+        setUploadBlockedMsg(
+          navigator.onLine === false
+            ? "Still offline. Please connect to the internet and retry."
+            : "Upload still failing. Please check your internet and retry."
+        )
+      }
+    } finally {
+      setRetryingUpload(false)
+    }
+  }, [sessionId, pendingUpload, retryingUpload, advanceAfterCurrentAnswer])
 
   const handleTimerTick = useCallback(
     (time: number) => {
@@ -405,6 +548,43 @@ export function ExamEngine({ exam }: ExamEngineProps) {
 
   return (
     <div className="mx-auto flex min-h-screen flex-col max-w-4xl px-4 py-4 md:py-8 select-none">
+      {uploadBlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">Upload failed</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {uploadBlockedMsg || "We couldn't upload your last recording. Please fix your internet connection."}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Your attempt will only count after you finish and submit the whole exam.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-xl border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted/30"
+                disabled={retryingUpload}
+              >
+                Restart
+              </button>
+              <button
+                type="button"
+                onClick={handleRetryUpload}
+                className="rounded-xl px-3 py-2 text-sm font-semibold text-white"
+                style={{ backgroundColor: "hsl(var(--exam-primary))" }}
+                disabled={retryingUpload}
+              >
+                {retryingUpload ? "Retrying..." : "Retry upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top bar: exam title + stepper */}
       <div className="mb-6 md:mb-10 space-y-4 animate-fade-in">
         <div className="flex items-center justify-between">
@@ -414,7 +594,14 @@ export function ExamEngine({ exam }: ExamEngineProps) {
             </span>
             <span className="text-sm font-semibold text-foreground hidden sm:inline">{exam.title}</span>
           </div>
-          <span className="text-xs font-semibold text-muted-foreground">{currentDisplayLabel}</span>
+          <div className="flex items-center gap-3">
+            {!exam.isFree && attemptInfo && (
+              <span className="hidden sm:inline text-xs font-semibold text-muted-foreground">
+                Attempt {Math.min(attemptInfo.used_attempts + 1, attemptInfo.max_attempts)}/{attemptInfo.max_attempts}
+              </span>
+            )}
+            <span className="text-xs font-semibold text-muted-foreground">{currentDisplayLabel}</span>
+          </div>
         </div>
         <ProgressStepper
           totalParts={3}

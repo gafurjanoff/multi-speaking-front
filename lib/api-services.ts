@@ -48,6 +48,19 @@ export async function fetchExams(level?: string): Promise<ExamCard[]> {
   return data.map(mapExamCard)
 }
 
+// ── Public landing stats ──
+
+export interface PublicLandingStats {
+  total_users: number
+  published_exams: number
+}
+
+export async function fetchPublicLandingStats(): Promise<PublicLandingStats | null> {
+  const res = await fetch(getApiUrl("/api/exams/stats"))
+  if (!res.ok) return null
+  return res.json()
+}
+
 // ── Exam detail (for taking the exam) ──
 
 export interface BackendExamDetail {
@@ -77,6 +90,8 @@ export interface BackendExamDetail {
       text: string
       sub_questions?: string[]
       images?: string[]
+      assessment_group_type?: string | null
+      assessment_group_key?: string | null
       for_against?: { side: string; point_text: string }[]
     }[]
   }[]
@@ -110,6 +125,8 @@ export function mapExamDetail(b: BackendExamDetail): Exam {
         text: q.text,
         subQuestions: q.sub_questions,
         images: q.images,
+        assessmentGroupType: q.assessment_group_type ?? null,
+        assessmentGroupKey: q.assessment_group_key ?? null,
         forAgainst: q.for_against?.map((fa) => ({
           side: fa.side as "for" | "against",
           pointText: fa.point_text,
@@ -174,6 +191,8 @@ export async function uploadRecording(
   partId: string,
   questionId: string,
   partType: string,
+  assessmentGroupType: string,
+  assessmentGroupKey: string,
   questionText: string,
   partOrder: number,
   questionOrder: number,
@@ -210,6 +229,8 @@ export async function uploadRecording(
       form.append("part_id", partId)
       form.append("question_id", questionId)
       form.append("part_type", partType)
+      form.append("assessment_group_type", assessmentGroupType)
+      if (assessmentGroupKey) form.append("assessment_group_key", assessmentGroupKey)
       form.append("question_text", questionText)
       form.append("part_order", String(partOrder))
       form.append("question_order", String(questionOrder))
